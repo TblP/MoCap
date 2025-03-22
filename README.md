@@ -60,15 +60,3 @@ exporter = om.Exporter()
 exporter.to_csv(filtered_points_3d, "motion_capture_data.csv")
 exporter.to_blender(filtered_points_3d, "motion_capture_data.blend")
 ```
-
-## Документация
-
-Полная документация доступна в [директории docs](./docs/) или на нашем [веб-сайте](https://openmocap.org/docs).
-
-## Вклад в проект
-
-Мы приветствуем любой вклад в проект! Пожалуйста, ознакомьтесь с нашим [руководством по участию](CONTRIBUTING.md) для получения дополнительной информации.
-
-## Лицензия
-
-Этот проект лицензирован по лицензии MIT - см. файл [LICENSE](LICENSE) для получения подробной информации.
