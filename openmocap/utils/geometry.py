@@ -620,6 +620,37 @@ def interpolate_missing_points(points: np.ndarray, max_gap: int = 10) -> np.ndar
     return interpolated_flat.reshape(original_shape)
 
 
+def project_3d_to_2d(points_3d: np.ndarray, projection_matrices: np.ndarray) -> np.ndarray:
+    """
+    Проецирует 3D-точки на плоскость изображения с использованием матриц проекции.
+
+    Args:
+        points_3d: Массив 3D-точек размера (n_points, 3)
+        projection_matrices: Матрицы проекции размера (n_cameras, 3, 4)
+
+    Returns:
+        np.ndarray: Массив спроецированных 2D-точек размера (n_cameras, n_points, 2)
+    """
+    n_cameras = projection_matrices.shape[0]
+    n_points = points_3d.shape[0]
+
+    # Преобразуем 3D-точки в однородные координаты
+    points_3d_homogeneous = np.hstack((points_3d, np.ones((n_points, 1))))
+
+    # Массив для хранения результатов
+    points_2d = np.zeros((n_cameras, n_points, 2))
+
+    # Для каждой камеры
+    for cam_idx in range(n_cameras):
+        # Проецируем 3D-точки на плоскость камеры
+        projected_points_homogeneous = np.dot(points_3d_homogeneous, projection_matrices[cam_idx].T)
+
+        # Переходим к неоднородным координатам
+        points_2d[cam_idx] = projected_points_homogeneous[:, :2] / projected_points_homogeneous[:, 2:]
+
+    return points_2d
+
+
 if __name__ == "__main__":
     # Пример использования
     from openmocap.utils.logger import configure_logging, LogLevel
