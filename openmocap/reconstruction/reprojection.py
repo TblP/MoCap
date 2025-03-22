@@ -44,7 +44,6 @@ class ReprojectionErrorAnalyzer:
         """
         self.camera_matrices = np.array(camera_matrices)
         n_cameras = len(camera_matrices)
-
         # Проверка размерности матриц
         for i, mat in enumerate(camera_matrices):
             if mat.shape != (3, 4):
@@ -801,7 +800,6 @@ def filter_outliers(
         for frame_idx in range(n_frames):
             # Проецируем 3D-точки текущего кадра на 2D
             projected_points = project_3d_to_2d(points_3d[frame_idx], projection_matrices)
-
             # Вычисляем ошибки репроекции
             frame_errors = points_2d[frame_idx] - projected_points
 

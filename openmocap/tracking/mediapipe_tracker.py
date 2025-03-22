@@ -414,7 +414,7 @@ if __name__ == "__main__":
     )
 
     # Отслеживаем точки на видео
-    video_path = "test_video.mp4"
+    video_path = r"C:\Users\vczyp\openmocap_data\recordings\recording_20250322_235323\camera_0.mp4"
     if Path(video_path).exists():
         landmarks = tracker.track_video(
             video_path,

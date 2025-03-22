@@ -473,13 +473,13 @@ if __name__ == "__main__":
 
     # Пути к видеофайлам
     calibration_videos = [
-        "calibration_videos/camera1.mp4",
-        "calibration_videos/camera2.mp4"
+        r"C:\Users\vczyp\openmocap_data\recordings\rec_with_calibr\camera_0.mp4",
+        r"C:\Users\vczyp\openmocap_data\recordings\rec_with_calibr\camera_1.mp4"
     ]
 
     recording_videos = [
-        "recording_videos/camera1.mp4",
-        "recording_videos/camera2.mp4"
+        r"C:\Users\vczyp\openmocap_data\recordings\recording_20250322_235323\camera_0.mp4",
+        r"C:\Users\vczyp\openmocap_data\recordings\recording_20250322_235323\camera_1.mp4"
     ]
 
     # Проверяем наличие видеофайлов
