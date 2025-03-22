@@ -633,13 +633,13 @@ if __name__ == "__main__":
     configure_logging(LogLevel.DEBUG)
 
     # Создаем объект калибратора с нестандартной шахматной доской
-    chess_board = ChessBoard(width=7, height=5, square_size=20.0)
+    chess_board = ChessBoard(width=7, height=7, square_size=50.0)
     calibrator = MultiCameraCalibrator(chess_board=chess_board)
 
     # Пример калибровки по видеофайлам
     try:
         # Находим видеофайлы
-        video_dir = "calibration_videos"
+        video_dir = r"C:\Users\vczyp\openmocap_data\recordings\recording_20250322_234228"
         if Path(video_dir).exists():
             video_paths = get_video_paths(video_dir)
 

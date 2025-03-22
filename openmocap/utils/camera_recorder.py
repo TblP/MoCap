@@ -504,7 +504,10 @@ def list_available_cameras(max_id: int = 10) -> List[int]:
     for camera_id in range(max_id):
         cap = cv2.VideoCapture(camera_id)
         if cap.isOpened():
-            available_cameras.append(camera_id)
+            # Проверяем, что камера действительно работает
+            ret, frame = cap.read()
+            if ret and frame is not None and frame.size > 0:
+                available_cameras.append(camera_id)
             cap.release()
 
     return available_cameras
@@ -517,7 +520,7 @@ if __name__ == "__main__":
     configure_logging(LogLevel.INFO)
 
     # Находим доступные камеры
-    cameras = list_available_cameras()
+    cameras = list_available_cameras(2)
     if not cameras:
         logger.error("Камеры не найдены")
         exit(1)
