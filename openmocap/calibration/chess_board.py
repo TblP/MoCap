@@ -304,7 +304,7 @@ if __name__ == "__main__":
     configure_logging(LogLevel.DEBUG)
 
     # Создаем объект шахматной доски
-    board = ChessBoard(width=7, height=5, square_size=20.0)
+    board = ChessBoard(width=7, height=7, square_size=50.0)
 
     # Путь к тестовому изображению (при наличии)
     test_image_path = "test_image.jpg"

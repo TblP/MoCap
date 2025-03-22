@@ -418,7 +418,7 @@ if __name__ == "__main__":
     configure_logging(LogLevel.DEBUG)
 
     # Создаем объект калибратора
-    calibrator = CameraCalibrator(chess_board=ChessBoard(width=7, height=5, square_size=20.0))
+    calibrator = CameraCalibrator(chess_board=ChessBoard(width=7, height=7, square_size=50.0))
 
     # Пример калибровки по видеофайлу
     try:
