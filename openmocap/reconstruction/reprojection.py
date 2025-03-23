@@ -77,73 +77,61 @@ class ReprojectionErrorAnalyzer:
         Вычисляет ошибки репроекции для всех камер и точек.
 
         Args:
-            points_3d: 3D-точки размера (n_points, 3) или (n_frames, n_points, 3)
-            points_2d: 2D-точки размера (n_cameras, n_points, 2) или (n_frames, n_cameras, n_points, 2)
-            visibility: Маска видимости точек размера (n_cameras, n_points) или (n_frames, n_cameras, n_points)
-                        Если None, точки считаются видимыми, если не NaN в points_2d
+            points_3d: 3D-точки размера (n_frames, n_points, 3)
+            points_2d: 2D-точки размера (n_cameras, n_frames, n_points, 3)
+            visibility: Маска видимости точек (если None, определяется из points_2d)
 
         Returns:
             Tuple[np.ndarray, np.ndarray]:
-                - Ошибки репроекции (евклидово расстояние) размера (n_cameras, n_points) или (n_frames, n_cameras, n_points)
-                - Векторы ошибок репроекции размера (n_cameras, n_points, 2) или (n_frames, n_cameras, n_points, 2)
+                - Ошибки репроекции (евклидово расстояние) размера (n_frames, n_cameras, n_points)
+                - Векторы ошибок репроекции размера (n_frames, n_cameras, n_points, 2)
         """
-        is_sequence = len(points_3d.shape) == 3
+        # Получаем размерности
+        n_frames, n_points, _ = points_3d.shape
+        n_cameras = len(self.camera_matrices)
 
-        if is_sequence:
-            # Обработка последовательности кадров
-            n_frames, n_points, _ = points_3d.shape
-            n_cameras = len(self.camera_matrices)
+        # Проверяем, соответствует ли форма points_2d ожидаемой
+        if points_2d.shape[:3] != (n_cameras, n_frames, n_points):
+            logger.error(
+                f"Неожиданная форма points_2d: {points_2d.shape}, ожидается ({n_cameras}, {n_frames}, {n_points}, ...)")
+            raise ValueError(f"Неподдерживаемая форма points_2d: {points_2d.shape}")
 
-            # Инициализация массивов для результатов
-            error_distances = np.full((n_frames, n_cameras, n_points), np.nan)
-            error_vectors = np.full((n_frames, n_cameras, n_points, 2), np.nan)
+        # Подготавливаем массивы для результатов
+        error_distances = np.full((n_frames, n_cameras, n_points), np.nan)
+        error_vectors = np.full((n_frames, n_cameras, n_points, 2), np.nan)
 
-            # Если маска видимости не предоставлена, создаем ее из points_2d
-            if visibility is None:
-                visibility = ~np.isnan(points_2d[:, :, :, 0])
+        # Если маска видимости не предоставлена, создаем ее из points_2d
+        if visibility is None:
+            visibility = ~np.isnan(points_2d[:, :, :, 0])
 
-            # Для каждого кадра
-            for frame_idx in range(n_frames):
-                # Проецируем 3D-точки на 2D
-                projected_points = project_3d_to_2d(points_3d[frame_idx], self.camera_matrices)
+        # Для каждого кадра
+        for frame_idx in range(n_frames):
+            # Проецируем 3D-точки текущего кадра на все камеры
+            projected_points = project_3d_to_2d(points_3d[frame_idx], self.camera_matrices)
+
+            # Для каждой камеры
+            for cam_idx in range(n_cameras):
+                # Извлекаем 2D-точки для текущего кадра и камеры
+                # Берем только x и y (первые два элемента), исключаем confidence
+                cam_points_2d = points_2d[cam_idx, frame_idx, :, :2]
+
+                # Извлекаем проецированные точки для текущей камеры
+                cam_projected = projected_points[cam_idx]
 
                 # Вычисляем ошибки репроекции
-                errors = points_2d[frame_idx] - projected_points
+                errors = cam_points_2d - cam_projected
 
-                # Применяем маску видимости
-                frame_visibility = visibility[frame_idx]
-                errors[~frame_visibility] = np.nan
+                # Применяем маску видимости, если она предоставлена
+                if visibility is not None:
+                    cam_visibility = visibility[cam_idx, frame_idx]
+                    errors[~cam_visibility] = np.nan
 
-                # Вычисляем евклидово расстояние
-                error_distances[frame_idx] = np.linalg.norm(errors, axis=2)
-                error_vectors[frame_idx] = errors
-        else:
-            # Обработка одного кадра
-            n_points = points_3d.shape[0]
-            n_cameras = len(self.camera_matrices)
-
-            # Инициализация массивов для результатов
-            error_distances = np.full((n_cameras, n_points), np.nan)
-            error_vectors = np.full((n_cameras, n_points, 2), np.nan)
-
-            # Если маска видимости не предоставлена, создаем ее из points_2d
-            if visibility is None:
-                visibility = ~np.isnan(points_2d[:, :, 0])
-
-            # Проецируем 3D-точки на 2D
-            projected_points = project_3d_to_2d(points_3d, self.camera_matrices)
-
-            # Вычисляем ошибки репроекции
-            errors = points_2d - projected_points
-
-            # Применяем маску видимости
-            errors[~visibility] = np.nan
-
-            # Вычисляем евклидово расстояние
-            error_distances = np.linalg.norm(errors, axis=2)
-            error_vectors = errors
+                # Сохраняем результаты
+                error_distances[frame_idx, cam_idx] = np.linalg.norm(errors, axis=1)
+                error_vectors[frame_idx, cam_idx] = errors
 
         return error_distances, error_vectors
+
 
     def analyze_errors(
             self,
@@ -769,7 +757,7 @@ def filter_outliers(
 
     Args:
         points_3d: 3D-точки размера (n_points, 3) или (n_frames, n_points, 3)
-        points_2d: 2D-точки размера (n_cameras, n_points, 2) или (n_frames, n_cameras, n_points, 2)
+        points_2d: 2D-точки размера (n_cameras, n_points, 2) или (n_cameras, n_frames, n_points, 2/3)
         projection_matrices: Матрицы проекции размера (n_cameras, 3, 4)
         visibility: Маска видимости точек (если None, определяется из points_2d)
         threshold_method: Метод определения порога ('percentile', 'std', 'absolute')
@@ -783,41 +771,76 @@ def filter_outliers(
     """
     is_sequence = len(points_3d.shape) == 3
 
-    # Проецируем 3D-точки на 2D
     if is_sequence:
         n_frames, n_points, _ = points_3d.shape
         n_cameras = projection_matrices.shape[0]
 
-        # Если маска видимости не предоставлена, создаем ее
-        if visibility is None:
-            visibility = ~np.isnan(points_2d[:, :, :, 0])
+        # Проверяем, соответствует ли форма points_2d ожидаемой
+        expected_shape = (n_cameras, n_frames, n_points)
+        if len(points_2d.shape) > 3 and points_2d.shape[:3] != expected_shape:
+            logger.error(f"Неожиданная форма points_2d: {points_2d.shape}, ожидается начало формы {expected_shape}")
+            raise ValueError(f"Неподдерживаемая форма points_2d: {points_2d.shape}")
 
         # Инициализируем массивы для результатов
         filtered_points_3d = np.copy(points_3d)
         error_distances = np.full((n_frames, n_cameras, n_points), np.nan)
 
+        # Если маска видимости не предоставлена, создаем ее из points_2d
+        if visibility is None:
+            if len(points_2d.shape) == 4:  # (n_cameras, n_frames, n_points, 2/3)
+                visibility = ~np.isnan(points_2d[:, :, :, 0])
+            else:
+                visibility = np.ones((n_cameras, n_frames, n_points), dtype=bool)
+
         # Для каждого кадра
         for frame_idx in range(n_frames):
-            # Проецируем 3D-точки текущего кадра на 2D
+            # Проецируем 3D-точки текущего кадра на все камеры
             projected_points = project_3d_to_2d(points_3d[frame_idx], projection_matrices)
-            # Вычисляем ошибки репроекции
-            frame_errors = points_2d[frame_idx] - projected_points
 
-            # Применяем маску видимости
-            if visibility is not None:
-                frame_visibility = visibility[frame_idx]
-                frame_errors[~frame_visibility] = np.nan
+            # Для каждой камеры
+            for cam_idx in range(n_cameras):
+                # Извлекаем 2D-точки для текущего кадра и камеры
+                if len(points_2d.shape) == 4:  # (n_cameras, n_frames, n_points, 2/3)
+                    # Берем только x и y (первые два элемента), исключаем confidence
+                    cam_points_2d = points_2d[cam_idx, frame_idx, :, :2]
+                else:
+                    cam_points_2d = points_2d[cam_idx]
 
-            # Вычисляем евклидово расстояние
-            error_distances[frame_idx] = np.linalg.norm(frame_errors, axis=2)
+                # Извлекаем проецированные точки для текущей камеры
+                cam_projected = projected_points[cam_idx]
 
-        # Идентифицируем выбросы
-        _, outlier_mask = identify_outliers(
-            error_distances,
-            threshold_method=threshold_method,
-            threshold_value=threshold_value,
-            return_mask=True
-        )
+                # Вычисляем ошибки репроекции
+                errors = cam_points_2d - cam_projected
+
+                # Применяем маску видимости
+                if visibility is not None:
+                    if len(visibility.shape) == 3:  # (n_cameras, n_frames, n_points)
+                        cam_visibility = visibility[cam_idx, frame_idx]
+                    else:
+                        cam_visibility = visibility[cam_idx]
+                    errors[~cam_visibility] = np.nan
+
+                # Сохраняем ошибки репроекции
+                error_distances[frame_idx, cam_idx] = np.linalg.norm(errors, axis=1)
+
+        # Определяем порог в зависимости от метода
+        if threshold_method == 'percentile':
+            all_errors = error_distances.reshape(-1)
+            all_errors = all_errors[~np.isnan(all_errors)]
+            threshold = np.percentile(all_errors, threshold_value)
+        elif threshold_method == 'std':
+            all_errors = error_distances.reshape(-1)
+            all_errors = all_errors[~np.isnan(all_errors)]
+            mean_error = np.mean(all_errors)
+            std_error = np.std(all_errors)
+            threshold = mean_error + threshold_value * std_error
+        elif threshold_method == 'absolute':
+            threshold = threshold_value
+        else:
+            raise ValueError(f"Неизвестный метод определения порога: {threshold_method}")
+
+        # Маркируем выбросы
+        outlier_mask = error_distances > threshold
 
         # Заменяем выбросы на NaN
         for frame_idx in range(n_frames):
@@ -825,48 +848,11 @@ def filter_outliers(
                 # Если точка является выбросом хотя бы для одной камеры
                 if np.any(outlier_mask[frame_idx, :, point_idx]):
                     filtered_points_3d[frame_idx, point_idx] = np.nan
-    else:
-        n_points = points_3d.shape[0]
-        n_cameras = projection_matrices.shape[0]
 
-        # Если маска видимости не предоставлена, создаем ее
-        if visibility is None:
-            visibility = ~np.isnan(points_2d[:, :, 0])
-
-        # Инициализируем массивы для результатов
-        filtered_points_3d = np.copy(points_3d)
-
-        # Проецируем 3D-точки на 2D
-        projected_points = project_3d_to_2d(points_3d, projection_matrices)
-
-        # Вычисляем ошибки репроекции
-        errors = points_2d - projected_points
-
-        # Применяем маску видимости
-        if visibility is not None:
-            errors[~visibility] = np.nan
-
-        # Вычисляем евклидово расстояние
-        error_distances = np.linalg.norm(errors, axis=2)
-
-        # Идентифицируем выбросы
-        _, outlier_mask = identify_outliers(
-            error_distances,
-            threshold_method=threshold_method,
-            threshold_value=threshold_value,
-            return_mask=True
-        )
-
-        # Заменяем выбросы на NaN
-        for point_idx in range(n_points):
-            # Если точка является выбросом хотя бы для одной камеры
-            if np.any(outlier_mask[:, point_idx]):
-                filtered_points_3d[point_idx] = np.nan
-
-    if return_errors:
-        return filtered_points_3d, error_distances
-    else:
-        return filtered_points_3d
+        if return_errors:
+            return filtered_points_3d, error_distances
+        else:
+            return filtered_points_3d
 
 
 def refine_points_3d(
@@ -896,12 +882,12 @@ def refine_points_3d(
     is_sequence = len(points_3d.shape) == 3
 
     # Функция оптимизации для одной 3D-точки
-    def optimize_point(point_3d, point_2d, projection_matrices, visibility=None):
+    def optimize_point(point_3d, points_2d_for_point, projection_matrices, visibility=None):
         n_cameras = len(projection_matrices)
 
         # Если маска видимости не предоставлена, создаем ее
         if visibility is None:
-            visibility = ~np.isnan(point_2d[:, 0])
+            visibility = ~np.isnan(points_2d_for_point[:, 0])
 
         # Функция для вычисления ошибки репроекции
         def reprojection_error(point):
@@ -921,7 +907,7 @@ def refine_points_3d(
                 projected = projected[:2] / projected[2]
 
                 # Вычисляем ошибку (разницу между наблюдаемой и проецированной точками)
-                error[cam_idx * 2:cam_idx * 2 + 2] = point_2d[cam_idx] - projected
+                error[cam_idx * 2:cam_idx * 2 + 2] = points_2d_for_point[cam_idx] - projected
 
             return error
 
@@ -1037,6 +1023,9 @@ def refine_points_3d(
         n_frames, n_points, _ = points_3d.shape
         n_cameras = len(projection_matrices)
 
+        # Проверяем формат points_2d
+        is_4d = len(points_2d.shape) == 4
+
         # Инициализируем результат
         refined_points_3d = np.copy(points_3d)
 
@@ -1048,16 +1037,30 @@ def refine_points_3d(
                     continue
 
                 # Получаем 2D-координаты для текущего кадра и точки
-                point_2d = points_2d[frame_idx, :, point_idx]
+                if is_4d:  # (n_cameras, n_frames, n_points, 2/3)
+                    # Получаем координаты x, y для всех камер
+                    point_2d = np.zeros((n_cameras, 2))
+                    for cam_idx in range(n_cameras):
+                        if points_2d.shape[-1] == 3:  # Если есть confidence
+                            point_2d[cam_idx] = points_2d[cam_idx, frame_idx, point_idx, :2]  # Только x, y
+                        else:
+                            point_2d[cam_idx] = points_2d[cam_idx, frame_idx, point_idx]
+                else:
+                    point_2d = points_2d[:, point_idx]
 
                 # Получаем маску видимости
                 if visibility is not None:
-                    point_visibility = visibility[frame_idx, :, point_idx]
+                    if len(visibility.shape) == 3:  # (n_cameras, n_frames, n_points)
+                        point_visibility = visibility[:, frame_idx, point_idx]
+                    elif len(visibility.shape) == 2:  # (n_cameras, n_points)
+                        point_visibility = visibility[:, point_idx]
+                    else:
+                        point_visibility = None
                 else:
                     point_visibility = ~np.isnan(point_2d[:, 0])
 
                 # Пропускаем точки, видимые менее чем на двух камерах
-                if np.sum(point_visibility) < 2:
+                if point_visibility is not None and np.sum(point_visibility) < 2:
                     continue
 
                 # Оптимизируем 3D-координаты

@@ -174,6 +174,7 @@ class Pipeline:
         Raises:
             ValueError: Если триангулятор не создан или данные отслеживания не доступны
         """
+
         if self.triangulator is None:
             raise ValueError("Триангулятор не инициализирован. Сначала выполните калибровку камер.")
 
@@ -181,13 +182,13 @@ class Pipeline:
             raise ValueError("Данные отслеживания точек не доступны. Сначала выполните отслеживание точек.")
 
         logger.info("Начинается триангуляция 3D-точек")
-
         # Получаем размеры данных
         n_cameras, n_frames, n_landmarks, _ = self.results['points_2d'].shape
 
         # Создаем массив для хранения 3D-точек
         points_3d = np.full((n_frames, n_landmarks, 3), np.nan)
-
+        logger.info(f"points_2d shape: {self.results['points_2d'].shape}")
+        logger.info(f"points_3d shape: {points_3d.shape}")
         # Триангулируем каждый кадр
         for frame in range(n_frames):
             points_2d_frame = self.results['points_2d'][:, frame, :, :2]
@@ -211,7 +212,8 @@ class Pipeline:
             points_3d=points_3d,
             points_2d=self.results['points_2d']
         )
-
+        logger.info(f"points_2d shape: {self.results['points_2d'].shape}")
+        logger.info(f"points_3d shape: {points_3d.shape}")
         self.results['reprojection_errors'] = error_distances
 
         logger.info("Триангуляция 3D-точек завершена успешно")
