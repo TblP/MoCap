@@ -4,7 +4,7 @@
 Предоставляет классы и функции для построения и выполнения конвейера обработки
 от калибровки камер до экспорта результатов.
 """
-
+import json
 import logging
 import numpy as np
 from pathlib import Path
@@ -16,7 +16,8 @@ from openmocap.tracking.mediapipe_tracker import MediaPipeTracker
 from openmocap.reconstruction.triangulation import Triangulator
 from openmocap.reconstruction.reprojection import ReprojectionErrorAnalyzer, filter_outliers, refine_points_3d
 from openmocap.export.csv_exporter import CSVExporter
-
+from openmocap.export.animation_calculator import AnimationCalculator
+from openmocap.export.json_exporter import JSONExporter
 logger = logging.getLogger(__name__)
 
 
@@ -334,10 +335,12 @@ class Pipeline:
             export_filtered: bool = True,
             export_refined: bool = True,
             export_angles: bool = True,
-            export_skeleton: bool = True
+            export_skeleton: bool = True,
+            export_animation: bool = True,  # Параметр для экспорта анимации
+            export_format: str = 'csv'  # Новый параметр: 'csv', 'json' или 'both'
     ) -> Dict[str, str]:
         """
-        Экспортирует результаты обработки в CSV-файлы.
+        Экспортирует результаты обработки в CSV и/или JSON файлы.
 
         Args:
             output_folder: Путь к папке для сохранения результатов
@@ -347,17 +350,30 @@ class Pipeline:
             export_refined: Экспортировать уточненные 3D-координаты
             export_angles: Экспортировать углы суставов
             export_skeleton: Экспортировать модель скелета
+            export_animation: Экспортировать параметры анимации
+            export_format: Формат экспорта данных ('csv', 'json' или 'both')
 
         Returns:
             Dict[str, str]: Словарь с путями к экспортированным файлам
 
         Raises:
-            ValueError: Если нет данных для экспорта
+            ValueError: Если нет данных для экспорта или неподдерживаемый формат
         """
         output_folder = Path(output_folder)
         output_folder.mkdir(parents=True, exist_ok=True)
 
-        exporter = CSVExporter()
+        # Проверяем формат экспорта
+        if export_format not in ["csv", "json", "both"]:
+            raise ValueError(
+                f"Неподдерживаемый формат экспорта: {export_format}. Поддерживаются 'csv', 'json' и 'both'")
+
+        # Создаем экспортеры в зависимости от формата
+        exporters = {}
+        if export_format in ["csv", "both"]:
+            exporters["csv"] = CSVExporter()
+        if export_format in ["json", "both"]:
+            exporters["json"] = JSONExporter()
+
         exported_files = {}
 
         # Подготовка метаданных
@@ -367,80 +383,214 @@ class Pipeline:
             "num_landmarks": len(self.tracker.landmark_names) if self.tracker else 0
         }
 
-        # Экспорт 2D-координат
-        if export_2d and self.results['points_2d'] is not None:
-            output_path = output_folder / "points_2d.csv"
-            exporter.export_points_2d(
-                points_2d=self.results['points_2d'],
-                output_path=output_path,
-                landmark_names=self.results.get('landmark_names'),
-                camera_names=self.triangulator.camera_names if self.triangulator else None,
-                include_confidence=True,
-                metadata=metadata
-            )
-            exported_files['points_2d'] = str(output_path)
-            logger.info(f"2D-координаты экспортированы в {output_path}")
+        # Для каждого формата экспорта
+        for format_name, exporter in exporters.items():
+            # Экспорт 2D-координат (только для CSV, т.к. для JSON они не так актуальны)
+            if export_2d and self.results['points_2d'] is not None and format_name == "csv":
+                output_path = output_folder / f"points_2d.{format_name}"
+                exporter.export_points_2d(
+                    points_2d=self.results['points_2d'],
+                    output_path=output_path,
+                    landmark_names=self.results.get('landmark_names'),
+                    camera_names=self.triangulator.camera_names if self.triangulator else None,
+                    include_confidence=True,
+                    metadata=metadata
+                )
+                exported_files[f'points_2d_{format_name}'] = str(output_path)
+                logger.info(f"2D-координаты экспортированы в {output_path}")
 
-        # Экспорт 3D-координат
-        if export_3d and self.results['points_3d'] is not None:
-            output_path = output_folder / "points_3d.csv"
-            exporter.export_points_3d(
-                points_3d=self.results['points_3d'],
-                output_path=output_path,
-                landmark_names=self.results.get('landmark_names'),
-                metadata=metadata
-            )
-            exported_files['points_3d'] = str(output_path)
-            logger.info(f"3D-координаты экспортированы в {output_path}")
+            # Экспорт 3D-координат
+            if export_3d and self.results['points_3d'] is not None:
+                output_path = output_folder / f"points_3d.{format_name}"
+                exporter.export_points_3d(
+                    points_3d=self.results['points_3d'],
+                    output_path=output_path,
+                    landmark_names=self.results.get('landmark_names'),
+                    metadata=metadata
+                )
+                exported_files[f'points_3d_{format_name}'] = str(output_path)
+                logger.info(f"3D-координаты экспортированы в {output_path}")
 
-        # Экспорт отфильтрованных 3D-координат
-        if export_filtered and self.results['filtered_points_3d'] is not None:
-            output_path = output_folder / "filtered_points_3d.csv"
-            exporter.export_points_3d(
-                points_3d=self.results['filtered_points_3d'],
-                output_path=output_path,
-                landmark_names=self.results.get('landmark_names'),
-                metadata={**metadata, "filter_applied": True}
-            )
-            exported_files['filtered_points_3d'] = str(output_path)
-            logger.info(f"Отфильтрованные 3D-координаты экспортированы в {output_path}")
+            # Экспорт отфильтрованных 3D-координат
+            if export_filtered and self.results['filtered_points_3d'] is not None:
+                output_path = output_folder / f"filtered_points_3d.{format_name}"
+                exporter.export_points_3d(
+                    points_3d=self.results['filtered_points_3d'],
+                    output_path=output_path,
+                    landmark_names=self.results.get('landmark_names'),
+                    metadata={**metadata, "filter_applied": True}
+                )
+                exported_files[f'filtered_points_3d_{format_name}'] = str(output_path)
+                logger.info(f"Отфильтрованные 3D-координаты экспортированы в {output_path}")
 
-        # Экспорт уточненных 3D-координат
-        if export_refined and self.results['refined_points_3d'] is not None:
-            output_path = output_folder / "refined_points_3d.csv"
-            exporter.export_points_3d(
-                points_3d=self.results['refined_points_3d'],
-                output_path=output_path,
-                landmark_names=self.results.get('landmark_names'),
-                metadata={**metadata, "refinement_applied": True}
-            )
-            exported_files['refined_points_3d'] = str(output_path)
-            logger.info(f"Уточненные 3D-координаты экспортированы в {output_path}")
+            # Экспорт уточненных 3D-координат
+            if export_refined and self.results['refined_points_3d'] is not None:
+                output_path = output_folder / f"refined_points_3d.{format_name}"
+                exporter.export_points_3d(
+                    points_3d=self.results['refined_points_3d'],
+                    output_path=output_path,
+                    landmark_names=self.results.get('landmark_names'),
+                    metadata={**metadata, "refinement_applied": True}
+                )
+                exported_files[f'refined_points_3d_{format_name}'] = str(output_path)
+                logger.info(f"Уточненные 3D-координаты экспортированы в {output_path}")
 
-        # Экспорт углов суставов
-        if export_angles and self.results['joint_angles'] is not None:
-            output_path = output_folder / "joint_angles.csv"
-            exporter.export_joint_angles(
-                joint_angles=self.results['joint_angles'],
-                output_path=output_path,
-                metadata=metadata
-            )
-            exported_files['joint_angles'] = str(output_path)
-            logger.info(f"Углы суставов экспортированы в {output_path}")
+            # Экспорт углов суставов
+            if export_angles and self.results['joint_angles'] is not None:
+                output_path = output_folder / f"joint_angles.{format_name}"
+                exporter.export_joint_angles(
+                    joint_angles=self.results['joint_angles'],
+                    output_path=output_path,
+                    metadata=metadata
+                )
+                exported_files[f'joint_angles_{format_name}'] = str(output_path)
+                logger.info(f"Углы суставов экспортированы в {output_path}")
 
-        # Экспорт модели скелета
-        if export_skeleton and hasattr(self.tracker, 'skeleton_model'):
-            output_path = output_folder / "skeleton_model.csv"
-            exporter.export_skeleton_model(
-                landmark_names=self.tracker.landmark_names,
-                connections=self.tracker.skeleton_model.connections,
-                output_path=output_path,
-                segment_lengths=self.tracker.skeleton_model.segment_lengths,
-                segment_names=self.tracker.skeleton_model.segment_names,
-                metadata=metadata
-            )
-            exported_files['skeleton_model'] = str(output_path)
-            logger.info(f"Модель скелета экспортирована в {output_path}")
+            # Экспорт модели скелета
+            if export_skeleton and hasattr(self.tracker, 'skeleton_model'):
+                output_path = output_folder / f"skeleton_model.{format_name}"
+                exporter.export_skeleton_model(
+                    landmark_names=self.tracker.landmark_names,
+                    connections=self.tracker.skeleton_model.connections,
+                    output_path=output_path,
+                    segment_lengths=self.tracker.skeleton_model.segment_lengths,
+                    segment_names=self.tracker.skeleton_model.segment_names,
+                    metadata=metadata
+                )
+                exported_files[f'skeleton_model_{format_name}'] = str(output_path)
+                logger.info(f"Модель скелета экспортирована в {output_path}")
+
+        # Экспорт параметров анимации (только в CSV, так как для JSON требуется отдельный формат)
+        if export_animation:
+
+            # Определяем, какие 3D-точки использовать
+            points_3d = self.results['refined_points_3d'] if self.results['refined_points_3d'] is not None else \
+                self.results['filtered_points_3d'] if self.results['filtered_points_3d'] is not None else \
+                    self.results['points_3d']
+
+            if points_3d is not None:
+                # Создаем калькулятор анимации
+                calculator = AnimationCalculator()
+
+                # Вычисляем параметры анимации
+                animation_params = calculator.process_sequence(points_3d)
+
+                # Сохраняем результаты в памяти
+                self.results['animation_params'] = animation_params
+
+                # Для каждого формата, экспортируем соответствующие файлы анимации
+                for format_name, exporter in exporters.items():
+                    if format_name == "csv":  # Пока CSV формат для анимации
+                        # Экспорт параметров анимации (углы Эйлера)
+                        output_path = output_folder / f"animation_euler.{format_name}"
+
+                        # Преобразуем параметры анимации в формат для экспорта
+                        euler_data = {}
+                        for joint_name, joint_data in self.results['animation_params'].items():
+                            euler_angles = joint_data['euler']
+                            for i, axis in enumerate(['x', 'y', 'z']):
+                                euler_data[f"{joint_name}_{axis}"] = euler_angles[:, i]
+
+                        # Используем экспортер для сохранения
+                        exporter.export_joint_angles(
+                            joint_angles=euler_data,
+                            output_path=output_path,
+                            metadata={**metadata, "animation_type": "euler_angles"}
+                        )
+
+                        exported_files[f'animation_euler_{format_name}'] = str(output_path)
+                        logger.info(f"Углы Эйлера анимации экспортированы в {output_path}")
+
+                        # Экспорт параметров анимации (кватернионы)
+                        output_path = output_folder / f"animation_quaternion.{format_name}"
+
+                        # Преобразуем параметры анимации в формат для экспорта
+                        quat_data = {}
+                        for joint_name, joint_data in self.results['animation_params'].items():
+                            quaternions = joint_data['quaternion']
+                            for i, component in enumerate(['w', 'x', 'y', 'z']):
+                                quat_data[f"{joint_name}_{component}"] = quaternions[:, i]
+
+                        # Используем экспортер для сохранения
+                        exporter.export_joint_angles(
+                            joint_angles=quat_data,
+                            output_path=output_path,
+                            metadata={**metadata, "animation_type": "quaternion"}
+                        )
+
+                        exported_files[f'animation_quaternion_{format_name}'] = str(output_path)
+                        logger.info(f"Кватернионы анимации экспортированы в {output_path}")
+
+                    elif format_name == "json":
+                        # Для JSON предлагаем более структурированный формат для анимации
+                        output_path = output_folder / f"animation.{format_name}"
+
+                        # Создаем структуру для анимации в JSON-формате
+                        animation_data = {
+                            "metadata": {
+                                **metadata,
+                                "animation_format": "json",
+                                "frames_count": points_3d.shape[0],
+                                "joints_count": len(animation_params)
+                            },
+                            "frames": []
+                        }
+
+                        # Заполняем кадры анимации
+                        for frame_idx in range(points_3d.shape[0]):
+                            frame_data = {}
+
+                            for joint_name, joint_data in animation_params.items():
+                                # Добавляем информацию о суставе, если есть данные для этого кадра
+                                joint_info = {}
+
+                                # Позиция
+                                if 'position' in joint_data and frame_idx < len(joint_data['position']):
+                                    position = joint_data['position'][frame_idx]
+                                    if not np.any(np.isnan(position)):
+                                        joint_info['position'] = {
+                                            'x': float(position[0]),
+                                            'y': float(position[1]),
+                                            'z': float(position[2])
+                                        }
+
+                                # Углы Эйлера
+                                if 'euler' in joint_data and frame_idx < len(joint_data['euler']):
+                                    euler = joint_data['euler'][frame_idx]
+                                    if not np.any(np.isnan(euler)):
+                                        joint_info['euler'] = {
+                                            'x': float(euler[0]),
+                                            'y': float(euler[1]),
+                                            'z': float(euler[2])
+                                        }
+
+                                # Кватернионы
+                                if 'quaternion' in joint_data and frame_idx < len(joint_data['quaternion']):
+                                    quat = joint_data['quaternion'][frame_idx]
+                                    if not np.any(np.isnan(quat)):
+                                        joint_info['quaternion'] = {
+                                            'w': float(quat[0]),
+                                            'x': float(quat[1]),
+                                            'y': float(quat[2]),
+                                            'z': float(quat[3])
+                                        }
+
+                                # Добавляем информацию о суставе в кадр, если она не пуста
+                                if joint_info:
+                                    frame_data[joint_name] = joint_info
+
+                            # Добавляем кадр только если в нем есть данные
+                            if frame_data:
+                                animation_data["frames"].append(frame_data)
+
+                        # Сохраняем в файл
+                        with open(output_path, 'w', encoding='utf-8') as f:
+                            json.dump(animation_data, f, indent=2, ensure_ascii=False)
+
+                        exported_files[f'animation_{format_name}'] = str(output_path)
+                        logger.info(f"Анимация экспортирована в {output_path}")
+            else:
+                logger.warning("Нет 3D-данных для экспорта анимации")
 
         return exported_files
 
@@ -496,7 +646,10 @@ if __name__ == "__main__":
             .filter_data() \
             .refine_data() \
             .calculate_joint_angles() \
-            .export_results("output_data")
+            .export_results(
+                output_folder="output_data",
+                export_format="json"  # или "both" для экспорта и в CSV, и в JSON
+            )
 
         logger.info("Обработка завершена успешно")
     else:

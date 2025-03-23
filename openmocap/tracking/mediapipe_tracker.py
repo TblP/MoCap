@@ -15,6 +15,7 @@ from openmocap.tracking.base_tracker import BaseTracker
 from openmocap.tracking.skeleton_model import SkeletonModel
 from openmocap.utils.video_utils import get_video_properties, video_frame_generator
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -40,38 +41,86 @@ class MediaPipeTracker(BaseTracker):
 
     # Словарь с именами ориентиров MediaPipe Pose
     POSE_LANDMARK_NAMES = [
-        'nose', 'left_eye_inner', 'left_eye', 'left_eye_outer',
-        'right_eye_inner', 'right_eye', 'right_eye_outer',
-        'left_ear', 'right_ear', 'mouth_left', 'mouth_right',
-        'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
-        'left_wrist', 'right_wrist', 'left_pinky', 'right_pinky',
-        'left_index', 'right_index', 'left_thumb', 'right_thumb',
-        'left_hip', 'right_hip', 'left_knee', 'right_knee',
-        'left_ankle', 'right_ankle', 'left_heel', 'right_heel',
-        'left_foot_index', 'right_foot_index'
+        'nose',
+        'left_eye_inner',
+        'left_eye',
+        'left_eye_outer',
+        'right_eye_inner',
+        'right_eye',
+        'right_eye_outer',
+        'left_ear',
+        'right_ear',
+        'mouth_left',
+        'mouth_right',
+        'left_shoulder',
+        'right_shoulder',
+        'left_elbow',
+        'right_elbow',
+        'left_wrist',
+        'right_wrist',
+        'left_pinky',
+        'right_pinky',
+        'left_index',
+        'right_index',
+        'left_thumb',
+        'right_thumb',
+        'left_hip',
+        'right_hip',
+        'left_knee',
+        'right_knee',
+        'left_ankle',
+        'right_ankle',
+        'left_heel',
+        'right_heel',
+        'left_foot_index',
+        'right_foot_index'
     ]
 
     # Индексы соединений костей MediaPipe Pose
     POSE_CONNECTIONS = [
-        # Лицо
+        # Туловище
+        # Соединяем центр бедер с центром плеч (spine)
+        (23, 11), (23, 12),  # левое бедро - левое/правое плечо
+        (24, 11), (24, 12),  # правое бедро - левое/правое плечо
+        (23, 24),  # соединение бедер (pelvis/hips)
+        (11, 12),  # соединение плеч (chest)
+
+        # Левая рука
+        (11, 13),  # левое плечо - левый локоть (upper_arm.L)
+        (13, 15),  # левый локоть - левое запястье (forearm.L)
+        # Пальцы левой руки
+        (15, 17),  # запястье - мизинец
+        (15, 19),  # запястье - указательный
+        (15, 21),  # запястье - большой
+
+        # Правая рука
+        (12, 14),  # правое плечо - правый локоть (upper_arm.R)
+        (14, 16),  # правый локоть - правое запястье (forearm.R)
+        # Пальцы правой руки
+        (16, 18),  # запястье - мизинец
+        (16, 20),  # запястье - указательный
+        (16, 22),  # запястье - большой
+
+        # Левая нога
+        (23, 25),  # левое бедро - левое колено (thigh.L)
+        (25, 27),  # левое колено - левая лодыжка (shin.L)
+        (27, 31),  # левая лодыжка - левый носок (foot.L to toes)
+        (27, 29),  # левая лодыжка - левая пятка
+
+        # Правая нога
+        (24, 26),  # правое бедро - правое колено (thigh.R)
+        (26, 28),  # правое колено - правая лодыжка (shin.R)
+        (28, 32),  # правая лодыжка - правый носок (foot.R to toes)
+        (28, 30),  # правая лодыжка - правая пятка
+
+        # Голова и шея
+        # Соединяем центр плеч с носом (для представления шеи и головы)
+        (0, 11), (0, 12),  # нос - левое/правое плечо
+
+        # Лицо (опционально, можно убрать для упрощения)
         (0, 1), (1, 2), (2, 3), (3, 7),  # Левая сторона лица
         (0, 4), (4, 5), (5, 6), (6, 8),  # Правая сторона лица
-        (9, 10),  # Рот
-
-        # Туловище
-        (11, 12), (11, 23), (12, 24), (23, 24),  # Плечи и бедра
-
-        # Руки
-        (11, 13), (13, 15),  # Левая рука
-        (12, 14), (14, 16),  # Правая рука
-
-        # Пальцы
-        (15, 17), (15, 19), (15, 21),  # Левая кисть
-        (16, 18), (16, 20), (16, 22),  # Правая кисть
-
-        # Ноги
-        (23, 25), (25, 27), (27, 29), (27, 31),  # Левая нога
-        (24, 26), (26, 28), (28, 30), (28, 32)  # Правая нога
+        (9, 10)  # Рот
     ]
 
     def __init__(
@@ -84,7 +133,7 @@ class MediaPipeTracker(BaseTracker):
             track_hands: bool = True,
             smooth_landmarks: bool = True,
             name: str = "mediapipe_tracker",
-            config: Optional[Dict] = None
+            config: Optional[Dict] = None,
     ):
         """
         Инициализирует объект трекера MediaPipe.
