@@ -1,0 +1,424 @@
+{
+  "metadata": {
+    "num_landmarks": 33,
+    "num_connections": 35,
+    "joint_mapping": {
+      "nose": 0,
+      "left_eye_inner": 1,
+      "left_eye": 2,
+      "left_eye_outer": 3,
+      "right_eye_inner": 4,
+      "right_eye": 5,
+      "right_eye_outer": 6,
+      "left_ear": 7,
+      "right_ear": 8,
+      "mouth_left": 9,
+      "mouth_right": 10,
+      "left_shoulder": 11,
+      "right_shoulder": 12,
+      "left_elbow": 13,
+      "right_elbow": 14,
+      "left_wrist": 15,
+      "right_wrist": 16,
+      "left_pinky": 17,
+      "right_pinky": 18,
+      "left_index": 19,
+      "right_index": 20,
+      "left_thumb": 21,
+      "right_thumb": 22,
+      "left_hip": 23,
+      "right_hip": 24,
+      "left_knee": 25,
+      "right_knee": 26,
+      "left_ankle": 27,
+      "right_ankle": 28,
+      "left_heel": 29,
+      "right_heel": 30,
+      "left_foot_index": 31,
+      "right_foot_index": 32
+    },
+    "tracker": "mediapipe_tracker",
+    "num_cameras": 2
+  },
+  "landmarks": [
+    {
+      "index": 0,
+      "name": "nose"
+    },
+    {
+      "index": 1,
+      "name": "left_eye_inner"
+    },
+    {
+      "index": 2,
+      "name": "left_eye"
+    },
+    {
+      "index": 3,
+      "name": "left_eye_outer"
+    },
+    {
+      "index": 4,
+      "name": "right_eye_inner"
+    },
+    {
+      "index": 5,
+      "name": "right_eye"
+    },
+    {
+      "index": 6,
+      "name": "right_eye_outer"
+    },
+    {
+      "index": 7,
+      "name": "left_ear"
+    },
+    {
+      "index": 8,
+      "name": "right_ear"
+    },
+    {
+      "index": 9,
+      "name": "mouth_left"
+    },
+    {
+      "index": 10,
+      "name": "mouth_right"
+    },
+    {
+      "index": 11,
+      "name": "left_shoulder"
+    },
+    {
+      "index": 12,
+      "name": "right_shoulder"
+    },
+    {
+      "index": 13,
+      "name": "left_elbow"
+    },
+    {
+      "index": 14,
+      "name": "right_elbow"
+    },
+    {
+      "index": 15,
+      "name": "left_wrist"
+    },
+    {
+      "index": 16,
+      "name": "right_wrist"
+    },
+    {
+      "index": 17,
+      "name": "left_pinky"
+    },
+    {
+      "index": 18,
+      "name": "right_pinky"
+    },
+    {
+      "index": 19,
+      "name": "left_index"
+    },
+    {
+      "index": 20,
+      "name": "right_index"
+    },
+    {
+      "index": 21,
+      "name": "left_thumb"
+    },
+    {
+      "index": 22,
+      "name": "right_thumb"
+    },
+    {
+      "index": 23,
+      "name": "left_hip"
+    },
+    {
+      "index": 24,
+      "name": "right_hip"
+    },
+    {
+      "index": 25,
+      "name": "left_knee"
+    },
+    {
+      "index": 26,
+      "name": "right_knee"
+    },
+    {
+      "index": 27,
+      "name": "left_ankle"
+    },
+    {
+      "index": 28,
+      "name": "right_ankle"
+    },
+    {
+      "index": 29,
+      "name": "left_heel"
+    },
+    {
+      "index": 30,
+      "name": "right_heel"
+    },
+    {
+      "index": 31,
+      "name": "left_foot_index"
+    },
+    {
+      "index": 32,
+      "name": "right_foot_index"
+    }
+  ],
+  "connections": [
+    {
+      "start": 23,
+      "end": 11,
+      "start_name": "left_hip",
+      "end_name": "left_shoulder",
+      "name": "left_hip_to_left_shoulder"
+    },
+    {
+      "start": 23,
+      "end": 12,
+      "start_name": "left_hip",
+      "end_name": "right_shoulder",
+      "name": "left_hip_to_right_shoulder"
+    },
+    {
+      "start": 24,
+      "end": 11,
+      "start_name": "right_hip",
+      "end_name": "left_shoulder",
+      "name": "right_hip_to_left_shoulder"
+    },
+    {
+      "start": 24,
+      "end": 12,
+      "start_name": "right_hip",
+      "end_name": "right_shoulder",
+      "name": "right_hip_to_right_shoulder"
+    },
+    {
+      "start": 23,
+      "end": 24,
+      "start_name": "left_hip",
+      "end_name": "right_hip",
+      "name": "left_hip_to_right_hip"
+    },
+    {
+      "start": 11,
+      "end": 12,
+      "start_name": "left_shoulder",
+      "end_name": "right_shoulder",
+      "name": "left_shoulder_to_right_shoulder"
+    },
+    {
+      "start": 11,
+      "end": 13,
+      "start_name": "left_shoulder",
+      "end_name": "left_elbow",
+      "name": "left_shoulder_to_left_elbow"
+    },
+    {
+      "start": 13,
+      "end": 15,
+      "start_name": "left_elbow",
+      "end_name": "left_wrist",
+      "name": "left_elbow_to_left_wrist"
+    },
+    {
+      "start": 15,
+      "end": 17,
+      "start_name": "left_wrist",
+      "end_name": "left_pinky",
+      "name": "left_wrist_to_left_pinky"
+    },
+    {
+      "start": 15,
+      "end": 19,
+      "start_name": "left_wrist",
+      "end_name": "left_index",
+      "name": "left_wrist_to_left_index"
+    },
+    {
+      "start": 15,
+      "end": 21,
+      "start_name": "left_wrist",
+      "end_name": "left_thumb",
+      "name": "left_wrist_to_left_thumb"
+    },
+    {
+      "start": 12,
+      "end": 14,
+      "start_name": "right_shoulder",
+      "end_name": "right_elbow",
+      "name": "right_shoulder_to_right_elbow"
+    },
+    {
+      "start": 14,
+      "end": 16,
+      "start_name": "right_elbow",
+      "end_name": "right_wrist",
+      "name": "right_elbow_to_right_wrist"
+    },
+    {
+      "start": 16,
+      "end": 18,
+      "start_name": "right_wrist",
+      "end_name": "right_pinky",
+      "name": "right_wrist_to_right_pinky"
+    },
+    {
+      "start": 16,
+      "end": 20,
+      "start_name": "right_wrist",
+      "end_name": "right_index",
+      "name": "right_wrist_to_right_index"
+    },
+    {
+      "start": 16,
+      "end": 22,
+      "start_name": "right_wrist",
+      "end_name": "right_thumb",
+      "name": "right_wrist_to_right_thumb"
+    },
+    {
+      "start": 23,
+      "end": 25,
+      "start_name": "left_hip",
+      "end_name": "left_knee",
+      "name": "left_hip_to_left_knee"
+    },
+    {
+      "start": 25,
+      "end": 27,
+      "start_name": "left_knee",
+      "end_name": "left_ankle",
+      "name": "left_knee_to_left_ankle"
+    },
+    {
+      "start": 27,
+      "end": 31,
+      "start_name": "left_ankle",
+      "end_name": "left_foot_index",
+      "name": "left_ankle_to_left_foot_index"
+    },
+    {
+      "start": 27,
+      "end": 29,
+      "start_name": "left_ankle",
+      "end_name": "left_heel",
+      "name": "left_ankle_to_left_heel"
+    },
+    {
+      "start": 24,
+      "end": 26,
+      "start_name": "right_hip",
+      "end_name": "right_knee",
+      "name": "right_hip_to_right_knee"
+    },
+    {
+      "start": 26,
+      "end": 28,
+      "start_name": "right_knee",
+      "end_name": "right_ankle",
+      "name": "right_knee_to_right_ankle"
+    },
+    {
+      "start": 28,
+      "end": 32,
+      "start_name": "right_ankle",
+      "end_name": "right_foot_index",
+      "name": "right_ankle_to_right_foot_index"
+    },
+    {
+      "start": 28,
+      "end": 30,
+      "start_name": "right_ankle",
+      "end_name": "right_heel",
+      "name": "right_ankle_to_right_heel"
+    },
+    {
+      "start": 0,
+      "end": 11,
+      "start_name": "nose",
+      "end_name": "left_shoulder",
+      "name": "nose_to_left_shoulder"
+    },
+    {
+      "start": 0,
+      "end": 12,
+      "start_name": "nose",
+      "end_name": "right_shoulder",
+      "name": "nose_to_right_shoulder"
+    },
+    {
+      "start": 0,
+      "end": 1,
+      "start_name": "nose",
+      "end_name": "left_eye_inner",
+      "name": "nose_to_left_eye_inner"
+    },
+    {
+      "start": 1,
+      "end": 2,
+      "start_name": "left_eye_inner",
+      "end_name": "left_eye",
+      "name": "left_eye_inner_to_left_eye"
+    },
+    {
+      "start": 2,
+      "end": 3,
+      "start_name": "left_eye",
+      "end_name": "left_eye_outer",
+      "name": "left_eye_to_left_eye_outer"
+    },
+    {
+      "start": 3,
+      "end": 7,
+      "start_name": "left_eye_outer",
+      "end_name": "left_ear",
+      "name": "left_eye_outer_to_left_ear"
+    },
+    {
+      "start": 0,
+      "end": 4,
+      "start_name": "nose",
+      "end_name": "right_eye_inner",
+      "name": "nose_to_right_eye_inner"
+    },
+    {
+      "start": 4,
+      "end": 5,
+      "start_name": "right_eye_inner",
+      "end_name": "right_eye",
+      "name": "right_eye_inner_to_right_eye"
+    },
+    {
+      "start": 5,
+      "end": 6,
+      "start_name": "right_eye",
+      "end_name": "right_eye_outer",
+      "name": "right_eye_to_right_eye_outer"
+    },
+    {
+      "start": 6,
+      "end": 8,
+      "start_name": "right_eye_outer",
+      "end_name": "right_ear",
+      "name": "right_eye_outer_to_right_ear"
+    },
+    {
+      "start": 9,
+      "end": 10,
+      "start_name": "mouth_left",
+      "end_name": "mouth_right",
+      "name": "mouth_left_to_mouth_right"
+    }
+  ]
+}
