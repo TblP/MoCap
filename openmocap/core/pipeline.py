@@ -464,9 +464,10 @@ class Pipeline:
         if export_animation:
 
             # Определяем, какие 3D-точки использовать
-            points_3d = self.results['refined_points_3d'] if self.results['refined_points_3d'] is not None else \
-                self.results['filtered_points_3d'] if self.results['filtered_points_3d'] is not None else \
-                    self.results['points_3d']
+            points_3d = self.results['refined_points_3d']
+            test_frame_idx = 65
+            print(f"Кадр {test_frame_idx} после заполнения пропусков:")
+            print(points_3d[test_frame_idx])
 
             if points_3d is not None:
                 # Создаем калькулятор анимации

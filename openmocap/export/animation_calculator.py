@@ -1153,48 +1153,53 @@ class AnimationCalculator:
                 'rotvec': np.zeros((num_frames, 3))  # Вектор вращения
             }
 
-            # Заполняем NaN значениями
-            animation_params[joint]['euler'][:] = np.nan
-            animation_params[joint]['quaternion'][:] = np.nan
-            animation_params[joint]['rotvec'][:] = np.nan
+            # Заполняем значениями по умолчанию (идентичное вращение)
+            identity_rot = R.identity()
+            default_euler = identity_rot.as_euler('xyz', degrees=True)
+            default_quat = np.array([1, 0, 0, 0])  # w, x, y, z
+            default_rotvec = np.array([0, 0, 0])
+
+            animation_params[joint]['euler'][:] = default_euler
+            animation_params[joint]['quaternion'][:] = default_quat
+            animation_params[joint]['rotvec'][:] = default_rotvec
+
+        # Ключевые индексы для MediaPipe Pose
+        key_indices = [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]
+        key_names = ["nose", "left_shoulder", "right_shoulder", "left_elbow", "right_elbow",
+                     "left_wrist", "right_wrist", "left_hip", "right_hip", "left_knee",
+                     "right_knee", "left_ankle", "right_ankle"]
+
+        # Проверяем размерность данных
+        if num_landmarks <= max(key_indices):
+            logger.warning(f"Недостаточно точек в данных: {num_landmarks}, требуются индексы до {max(key_indices)}")
+            # Возвращаем анимационные параметры со значениями по умолчанию
+            return animation_params
 
         # Обрабатываем каждый кадр
         for frame_idx in range(num_frames):
-            # Проверяем наличие NaN значений в кадре
-            if np.isnan(points_3d[frame_idx]).any():
-                logger.debug(f"Кадр {frame_idx} содержит NaN значения, устанавливаем вращения по умолчанию")
+            frame_data = points_3d[frame_idx]
 
-                # Устанавливаем идентичные вращения для кадров с NaN
-                for joint in joint_names:
-                    identity_rot = R.identity()
-                    animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
-                    animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
-                    animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
+            # Расширенная диагностика NaN
+            nan_points = []
 
+            # Проверяем наличие NaN в ключевых точках и собираем информацию
+            for i, idx in enumerate(key_indices):
+                if idx < frame_data.shape[0] and np.isnan(frame_data[idx]).any():
+                    nan_coords = []
+                    for j in range(coords_dim):
+                        if np.isnan(frame_data[idx, j]):
+                            nan_coords.append(j)
+                    nan_points.append((idx, key_names[i], nan_coords))
+
+            # Если есть NaN в ключевых точках
+            if nan_points:
+                missing_info = ', '.join([f"{name}({idx}): {coords}" for idx, name, coords in nan_points])
+                logger.debug(f"Кадр {frame_idx} содержит NaN в ключевых точках: {missing_info}")
+                # Пропускаем кадр - для него уже установлены значения по умолчанию
                 continue
 
+            # Основная обработка, если все ключевые точки валидны
             try:
-                # Получаем данные для текущего кадра
-                frame_data = points_3d[frame_idx]
-
-                # Дополнительная проверка валидности кадра
-                has_valid_data = True
-                for landmark_idx in [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]:
-                    if landmark_idx >= frame_data.shape[0] or np.isnan(frame_data[landmark_idx]).any():
-                        has_valid_data = False
-                        break
-
-                if not has_valid_data:
-                    logger.debug(
-                        f"Кадр {frame_idx} не содержит всех необходимых точек, устанавливаем вращения по умолчанию")
-                    # Устанавливаем идентичные вращения для некачественных кадров
-                    for joint in joint_names:
-                        identity_rot = R.identity()
-                        animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
-                        animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
-                        animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
-                    continue
-
                 # Вычисляем вращения для суставов
                 joint_rotations = self.calculate_joint_rotations(frame_data)
 
@@ -1204,7 +1209,7 @@ class AnimationCalculator:
                         continue
 
                     try:
-                        # Получаем различные представления вращения
+                        # Сохраняем различные представления вращения
                         animation_params[joint]['euler'][frame_idx] = rotation.as_euler('xyz', degrees=True)
 
                         # scipy вращения хранят кватернионы в формате xyzw, переводим в wxyz
@@ -1215,44 +1220,26 @@ class AnimationCalculator:
                         animation_params[joint]['rotvec'][frame_idx] = rotation.as_rotvec()
                     except Exception as e:
                         logger.warning(f"Ошибка при сохранении вращения для сустава {joint} в кадре {frame_idx}: {e}")
-                        # Устанавливаем идентичное вращение при ошибке
-                        identity_rot = R.identity()
-                        animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
-                        animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
-                        animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
+                        # При ошибке оставляем значения по умолчанию для этого сустава в текущем кадре
 
             except Exception as e:
                 logger.warning(f"Ошибка при обработке кадра {frame_idx}: {e}")
-                # Устанавливаем идентичные вращения для кадров с ошибками
-                for joint in joint_names:
-                    identity_rot = R.identity()
-                    animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
-                    animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
-                    animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
+                # При ошибке оставляем значения по умолчанию для всех суставов в текущем кадре
 
-        # Постобработка: интерполируем пропущенные значения (NaN)
+        # Постобработка: интерполируем пропущенные значения
         for joint in joint_names:
             for param_type in ['euler', 'quaternion', 'rotvec']:
                 param_data = animation_params[joint][param_type]
 
-                # Проверяем наличие NaN значений
-                if np.isnan(param_data).any():
-                    # Заменяем NaN значениями по умолчанию
-                    if param_type == 'quaternion':
-                        default_value = [1, 0, 0, 0]  # w, x, y, z для кватернионов
-                    else:
-                        default_value = [0, 0, 0]  # для euler и rotvec
+                # Интерполяция для euler и rotvec (линейная)
+                if param_type in ['euler', 'rotvec']:
+                    # Пропускаем - для этих параметров мы уже установили значения по умолчанию,
+                    # а не NaN, поэтому интерполяция не нужна
+                    pass
 
-                    # Заменяем все NaN значения
-                    for i in range(param_data.shape[0]):
-                        if np.isnan(param_data[i]).any():
-                            param_data[i] = default_value
+                # Специальная обработка для кватернионов (сферическая интерполяция)
+                # Если бы мы использовали NaN для кватернионов, их нужно было бы интерполировать
+                # с учетом их специфики, но поскольку мы используем идентичные вращения,
+                # то дополнительная интерполяция не требуется
 
         return animation_params
-
-    def export_to_bvh(self, animation_params: Dict[str, Any], output_path: str) -> None:
-        """
-        Экспортирует параметры анимации в формат BVH.
-        """
-        # Заглушка для будущей реализации
-        pass
