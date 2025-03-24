@@ -32,21 +32,43 @@ class AnimationCalculator:
         """
         central_points = {}
 
-        # Центр бедер (hips/pelvis)
-        left_hip = landmarks[23]
-        right_hip = landmarks[24]
-        hips = (left_hip + right_hip) / 2
-        central_points['hips'] = hips
+        # Проверка на наличие NaN в ключевых точках
+        if np.isnan(landmarks[23]).any() or np.isnan(landmarks[24]).any():
+            # Если хотя бы одна из точек бедер содержит NaN, используем примерную позицию
+            hips = np.array([0.0, 0.0, 0.0])  # Или другая разумная позиция по умолчанию
+            central_points['hips'] = hips
+        else:
+            # Центр бедер (hips/pelvis)
+            left_hip = landmarks[23]
+            right_hip = landmarks[24]
+            hips = (left_hip + right_hip) / 2
+            central_points['hips'] = hips
 
-        # Центр плеч (chest)
-        left_shoulder = landmarks[11]
-        right_shoulder = landmarks[12]
-        chest = (left_shoulder + right_shoulder) / 2
-        central_points['chest'] = chest
+        # Проверка на наличие NaN в точках плеч
+        if np.isnan(landmarks[11]).any() or np.isnan(landmarks[12]).any():
+            # Если хотя бы одна из точек плеч содержит NaN
+            # Используем относительную позицию от бедер, если они доступны
+            if 'hips' in central_points and not np.isnan(central_points['hips']).any():
+                chest = central_points['hips'] + np.array([0.0, 0.5, 0.0])  # Примерно выше бедер
+            else:
+                chest = np.array([0.0, 0.5, 0.0])  # Или другая позиция по умолчанию
+            central_points['chest'] = chest
+        else:
+            # Центр плеч (chest)
+            left_shoulder = landmarks[11]
+            right_shoulder = landmarks[12]
+            chest = (left_shoulder + right_shoulder) / 2
+            central_points['chest'] = chest
 
         # Позвоночник (spine) - интерполяция между бедрами и плечами
-        spine = hips + 0.5 * (chest - hips)  # Точка посередине
-        central_points['spine'] = spine
+        if 'hips' in central_points and 'chest' in central_points:
+            if not (np.isnan(central_points['hips']).any() or np.isnan(central_points['chest']).any()):
+                spine = central_points['hips'] + 0.5 * (central_points['chest'] - central_points['hips'])
+                central_points['spine'] = spine
+            else:
+                central_points['spine'] = np.array([0.0, 0.25, 0.0])  # Примерная позиция
+        else:
+            central_points['spine'] = np.array([0.0, 0.25, 0.0])  # Примерная позиция
 
         return central_points
 
@@ -187,44 +209,9 @@ class AnimationCalculator:
             'right_ankle': 'right_knee'
         }
 
-        # Функция для обеспечения правосторонней системы координат
-        def ensure_right_handed(matrix):
-            """Проверяет и исправляет матрицу, чтобы гарантировать положительный определитель"""
-            det = np.linalg.det(matrix)
-            if abs(det) < 1e-6:  # Проверка на сингулярность
-                return np.eye(3)  # Возвращаем единичную матрицу в случае проблем
-            if det < 0:
-                # Инвертируем ось X для получения правосторонней системы
-                matrix = matrix.copy()  # Создаем копию, чтобы не изменять оригинал
-                matrix[:, 0] = -matrix[:, 0]
-                return matrix
-            return matrix
-
-        # Функция для ортогонализации матрицы
-        def orthogonalize(matrix):
-            """Применяет процесс Грама-Шмидта для ортогонализации матрицы"""
-            # Проверяем на наличие NaN значений
-            if np.isnan(matrix).any():
-                return np.eye(3)
-
-            u, s, vh = np.linalg.svd(matrix, full_matrices=False)
-            if np.linalg.det(u @ vh) < 0:
-                u[:, -1] = -u[:, -1]
-            return u @ vh
-
-        # Функция для создания и проверки осей
-        def create_validated_axes(x, y, z, default_axes=np.eye(3)):
-            # Проверка на NaN или нулевые векторы
-            if (np.isnan(x).any() or np.isnan(y).any() or np.isnan(z).any() or
-                    np.allclose(x, 0) or np.allclose(y, 0) or np.allclose(z, 0)):
-                return default_axes
-
-            # Создаем матрицу из осей и ортогонализируем
-            axes = np.column_stack([x, y, z])
-            orthogonal_axes = orthogonalize(axes)
-
-            # Проверяем определитель
-            return ensure_right_handed(orthogonal_axes)
+        # Инициализация всех вращений как идентичных
+        for joint in hierarchy.keys():
+            rotations[joint] = R.identity()
 
         # Маппинг индексов MediaPipe на имена суставов
         index_to_name = {
@@ -243,698 +230,824 @@ class AnimationCalculator:
             28: 'right_ankle'
         }
 
+        # Функция для обеспечения правосторонней системы координат
+        def ensure_right_handed(matrix):
+            """Проверяет и исправляет матрицу, чтобы гарантировать положительный определитель"""
+            if matrix is None:
+                return np.eye(3)
+
+            # Проверка на NaN
+            if np.isnan(matrix).any():
+                return np.eye(3)
+
+            det = np.linalg.det(matrix)
+            if abs(det) < 1e-6:  # Проверка на сингулярность
+                return np.eye(3)  # Возвращаем единичную матрицу в случае проблем
+            if det < 0:
+                # Инвертируем ось X для получения правосторонней системы
+                matrix = matrix.copy()  # Создаем копию, чтобы не изменять оригинал
+                matrix[:, 0] = -matrix[:, 0]
+            return matrix
+
+        # Функция для ортогонализации матрицы
+        def orthogonalize(matrix):
+            """Применяет процесс Грама-Шмидта для ортогонализации матрицы"""
+            # Проверка на None
+            if matrix is None:
+                return np.eye(3)
+
+            # Проверяем на наличие NaN значений
+            if np.isnan(matrix).any():
+                return np.eye(3)
+
+            try:
+                u, s, vh = np.linalg.svd(matrix, full_matrices=False)
+                if np.linalg.det(u @ vh) < 0:
+                    u[:, -1] = -u[:, -1]
+                return u @ vh
+            except np.linalg.LinAlgError:
+                return np.eye(3)
+
+        # Функция для создания и проверки осей
+        def create_validated_axes(x, y, z, default_axes=np.eye(3)):
+            # Проверка на None
+            if x is None or y is None or z is None:
+                return default_axes
+
+            # Проверка на NaN или нулевые векторы
+            if (np.isnan(x).any() or np.isnan(y).any() or np.isnan(z).any() or
+                    np.allclose(x, 0) or np.allclose(y, 0) or np.allclose(z, 0)):
+                return default_axes
+
+            # Проверка на малые значения векторов
+            if np.linalg.norm(x) < 1e-6 or np.linalg.norm(y) < 1e-6 or np.linalg.norm(z) < 1e-6:
+                return default_axes
+
+            try:
+                # Создаем матрицу из осей и ортогонализируем
+                axes = np.column_stack([x, y, z])
+                orthogonal_axes = orthogonalize(axes)
+
+                # Проверяем определитель
+                return ensure_right_handed(orthogonal_axes)
+            except Exception as e:
+                logger.warning(f"Ошибка при создании осей: {e}")
+                return default_axes
+
+        # Проверка наличия NaN в ключевых точках скелета
+        has_nan = False
+        for i in [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]:
+            if np.isnan(landmarks[i]).any():
+                has_nan = True
+                break
+
+        if has_nan:
+            # В случае наличия NaN в ключевых точках, возвращаем идентичные вращения
+            # Это позволит избежать ошибок при расчетах
+            for joint in hierarchy.keys():
+                rotations[joint] = R.identity()
+            return rotations
+
         try:
             # Вычисляем центральные точки
             central_points = self.calculate_central_points(landmarks)
 
+            # Проверка наличия НАН в центральных точках
+            for key, point in central_points.items():
+                if np.isnan(point).any():
+                    # Если в центральных точках есть NaN, возвращаем идентичные вращения
+                    return {joint: R.identity() for joint in hierarchy.keys()}
+
             # 1. Начинаем с таза (бедер) - корень иерархии
-            left_hip = landmarks[23]
-            right_hip = landmarks[24]
-            hips = central_points['hips']
-
-            # Получаем точки для позвоночника и плеч
-            left_shoulder = landmarks[11]
-            right_shoulder = landmarks[12]
-            chest = central_points.get('chest', (left_shoulder + right_shoulder) / 2)
-            spine = central_points.get('spine', (hips + chest) / 2)
-
-            # Создаем локальные оси для таза
-            pelvis_x = right_hip - left_hip  # Вектор от левого к правому бедру
-            norm_x = np.linalg.norm(pelvis_x)
-
-            if norm_x > 1e-6:
-                pelvis_x = pelvis_x / norm_x
-
-                # Y-ось вверх
-                pelvis_y = chest - hips
-                norm_y = np.linalg.norm(pelvis_y)
-
-                if norm_y > 1e-6:
-                    pelvis_y = pelvis_y / norm_y
-
-                    # Z-ось вперед (перпендикулярно X и Y)
-                    pelvis_z = np.cross(pelvis_x, pelvis_y)
-                    norm_z = np.linalg.norm(pelvis_z)
-
-                    if norm_z > 1e-6:
-                        pelvis_z = pelvis_z / norm_z
-
-                        # Создаем и проверяем матрицу локальных осей
-                        local_axes['hips'] = create_validated_axes(pelvis_x, pelvis_y, pelvis_z)
-
-                        # Вычисляем вращение от осей по умолчанию
-                        default = default_axes['hips']
-                        rotation_matrix = local_axes['hips'] @ default.T
-
-                        try:
-                            rotations['hips'] = R.from_matrix(rotation_matrix)
-                        except ValueError:
-                            # Если матрица имеет проблемы, используем единичное вращение
-                            logger.warning(f"Невозможно создать вращение для hips, используем единичное вращение")
-                            rotations['hips'] = R.identity()
-
-            # Если не удалось создать вращение для таза, используем единичное
-            if 'hips' not in rotations:
+            if np.isnan(landmarks[23]).any() or np.isnan(landmarks[24]).any():
+                # Если одно из бедер содержит NaN, используем идентичное вращение
                 rotations['hips'] = R.identity()
-                local_axes['hips'] = np.eye(3)
-
-            # 2. Вычисление позвоночника
-            spine_vector = chest - hips
-            norm_spine = np.linalg.norm(spine_vector)
-
-            if norm_spine > 1e-6:
-                spine_vector = spine_vector / norm_spine
-
-                # Используем оси X и Z от таза
-                spine_y = spine_vector  # Ось позвоночника (вверх)
-                spine_x = local_axes['hips'][:, 0]  # X от таза
-
-                # Z перпендикулярно X и Y
-                spine_z = np.cross(spine_x, spine_y)
-                norm_z = np.linalg.norm(spine_z)
-
-                if norm_z > 1e-6:
-                    spine_z = spine_z / norm_z
-
-                    # Переортогонализируем X
-                    spine_x = np.cross(spine_y, spine_z)
-                    spine_x = spine_x / np.linalg.norm(spine_x)
-
-                    # Создаем матрицу локальных осей
-                    local_axes['spine'] = create_validated_axes(spine_x, spine_y, spine_z)
-
-                    # Получаем вращение в локальной системе координат родителя
-                    parent_axes = local_axes['hips']
-                    try:
-                        parent_inverse = np.linalg.inv(parent_axes)
-                        local_to_parent = parent_inverse @ local_axes['spine']
-
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['spine']
-                        rotation_matrix = local_to_parent @ default.T
-
-                        try:
-                            rotations['spine'] = R.from_matrix(rotation_matrix)
-                        except ValueError:
-                            logger.warning(f"Невозможно создать вращение для spine, используем единичное вращение")
-                            rotations['spine'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для spine")
-                        rotations['spine'] = R.identity()
+                local_axes['hips'] = default_axes['hips']
             else:
-                rotations['spine'] = R.identity()
+                left_hip = landmarks[23]
+                right_hip = landmarks[24]
+                hips = central_points['hips']
 
-            # 3. Шея и голова
-            # Приближаем положение шеи как точку между плечами
-            neck_position = (left_shoulder + right_shoulder) / 2
-            head_position = landmarks[0]  # Нос
+                # Получаем точки для позвоночника и плеч
+                left_shoulder = landmarks[11] if not np.isnan(landmarks[11]).any() else None
+                right_shoulder = landmarks[12] if not np.isnan(landmarks[12]).any() else None
 
-            neck_to_head = head_position - neck_position
-            norm_neck = np.linalg.norm(neck_to_head)
-
-            if norm_neck > 1e-6:
-                neck_to_head = neck_to_head / norm_neck
-
-                # Используем Y как основное направление для шеи (вверх)
-                neck_y = neck_to_head
-
-                # X берем от позвоночника
-                if 'spine' in local_axes:
-                    neck_x = local_axes['spine'][:, 0]
+                if left_shoulder is not None and right_shoulder is not None:
+                    chest = central_points.get('chest', (left_shoulder + right_shoulder) / 2)
                 else:
-                    neck_x = np.array([1, 0, 0])
+                    chest = hips + np.array([0, 0.5, 0])  # Примерная позиция
 
-                # Z перпендикулярно X и Y
-                neck_z = np.cross(neck_x, neck_y)
-                norm_z = np.linalg.norm(neck_z)
+                spine = central_points.get('spine', (hips + chest) / 2)
 
-                if norm_z > 1e-6:
-                    neck_z = neck_z / norm_z
-
-                    # Переортогонализируем X
-                    neck_x = np.cross(neck_y, neck_z)
-                    neck_x = neck_x / np.linalg.norm(neck_x)
-
-                    # Создаем матрицу локальных осей
-                    local_axes['neck'] = create_validated_axes(neck_x, neck_y, neck_z)
-
-                    # Получаем вращение в локальной системе координат родителя
-                    if 'spine' in local_axes:
-                        parent_axes = local_axes['spine']
-                    else:
-                        parent_axes = np.eye(3)
-
-                    try:
-                        parent_inverse = np.linalg.inv(parent_axes)
-                        local_to_parent = parent_inverse @ local_axes['neck']
-
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['neck']
-                        rotation_matrix = local_to_parent @ default.T
-
-                        try:
-                            rotations['neck'] = R.from_matrix(rotation_matrix)
-                        except ValueError:
-                            logger.warning(f"Невозможно создать вращение для neck, используем единичное вращение")
-                            rotations['neck'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для neck")
-                        rotations['neck'] = R.identity()
-
-                    # Добавляем голову (для простоты без дополнительных поворотов)
-                    rotations['head'] = R.identity()
-                else:
-                    rotations['neck'] = R.identity()
-                    rotations['head'] = R.identity()
-            else:
-                rotations['neck'] = R.identity()
-                rotations['head'] = R.identity()
-
-            # 4. Левое плечо
-            left_arm_vector = landmarks[13] - landmarks[11]  # Левый локоть - левое плечо
-            norm_arm = np.linalg.norm(left_arm_vector)
-
-            if norm_arm > 1e-6:
-                left_arm_vector = left_arm_vector / norm_arm
-
-                # Z - основная ось руки (влево)
-                shoulder_z = -left_arm_vector  # Направление к локтю
-
-                # Y берем от позвоночника
-                if 'spine' in local_axes:
-                    shoulder_y = local_axes['spine'][:, 1]
-                else:
-                    shoulder_y = np.array([0, 1, 0])
-
-                # X перпендикулярно Y и Z
-                shoulder_x = np.cross(shoulder_y, shoulder_z)
-                norm_x = np.linalg.norm(shoulder_x)
+                # Создаем локальные оси для таза
+                pelvis_x = right_hip - left_hip  # Вектор от левого к правому бедру
+                norm_x = np.linalg.norm(pelvis_x)
 
                 if norm_x > 1e-6:
-                    shoulder_x = shoulder_x / norm_x
+                    pelvis_x = pelvis_x / norm_x
 
-                    # Переортогонализируем Y
-                    shoulder_y = np.cross(shoulder_z, shoulder_x)
-                    shoulder_y = shoulder_y / np.linalg.norm(shoulder_y)
+                    # Y-ось вверх
+                    pelvis_y = chest - hips
+                    norm_y = np.linalg.norm(pelvis_y)
 
-                    # Создаем матрицу локальных осей
-                    local_axes['left_shoulder'] = create_validated_axes(shoulder_x, shoulder_y, shoulder_z)
+                    if norm_y > 1e-6:
+                        pelvis_y = pelvis_y / norm_y
 
-                    # Получаем вращение в локальной системе координат родителя
-                    if 'spine' in local_axes:
-                        parent_axes = local_axes['spine']
+                        # Z-ось вперед (перпендикулярно X и Y)
+                        pelvis_z = np.cross(pelvis_x, pelvis_y)
+                        norm_z = np.linalg.norm(pelvis_z)
+
+                        if norm_z > 1e-6:
+                            pelvis_z = pelvis_z / norm_z
+
+                            # Создаем и проверяем матрицу локальных осей
+                            try:
+                                local_axes['hips'] = create_validated_axes(pelvis_x, pelvis_y, pelvis_z,
+                                                                           default_axes['hips'])
+
+                                # Вычисляем вращение от осей по умолчанию
+                                default = default_axes['hips']
+                                rotation_matrix = local_axes['hips'] @ default.T
+
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    rotations['hips'] = R.from_matrix(rotation_matrix)
+                                else:
+                                    rotations['hips'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для hips: {e}")
+                                rotations['hips'] = R.identity()
+                                local_axes['hips'] = default_axes['hips']
+                        else:
+                            rotations['hips'] = R.identity()
+                            local_axes['hips'] = default_axes['hips']
                     else:
-                        parent_axes = np.eye(3)
+                        rotations['hips'] = R.identity()
+                        local_axes['hips'] = default_axes['hips']
+                else:
+                    rotations['hips'] = R.identity()
+                    local_axes['hips'] = default_axes['hips']
 
-                    try:
-                        parent_inverse = np.linalg.inv(parent_axes)
-                        local_to_parent = parent_inverse @ local_axes['left_shoulder']
+            # 2. Вычисление позвоночника
+            if 'spine' not in central_points or 'chest' not in central_points or 'hips' not in central_points:
+                rotations['spine'] = R.identity()
+                local_axes['spine'] = default_axes['spine']
+            else:
+                spine_vector = central_points['chest'] - central_points['hips']
+                norm_spine = np.linalg.norm(spine_vector)
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['left_shoulder']
-                        rotation_matrix = local_to_parent @ default.T
+                if norm_spine > 1e-6:
+                    spine_vector = spine_vector / norm_spine
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                    # Используем оси X и Z от таза
+                    spine_y = spine_vector  # Ось позвоночника (вверх)
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], -80, 130)  # Сгибание вперед/назад
-                            euler[1] = np.clip(euler[1], -30, 170)  # Отведение в сторону
-                            euler[2] = np.clip(euler[2], -90, 90)  # Вращение
+                    if 'hips' in local_axes:
+                        spine_x = local_axes['hips'][:, 0]  # X от таза
+                    else:
+                        spine_x = default_axes['hips'][:, 0]
 
-                            rotations['left_shoulder'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(
-                                f"Невозможно создать вращение для left_shoulder, используем единичное вращение")
+                    # Z перпендикулярно X и Y
+                    spine_z = np.cross(spine_x, spine_y)
+                    norm_z = np.linalg.norm(spine_z)
+
+                    if norm_z > 1e-6:
+                        spine_z = spine_z / norm_z
+
+                        # Переортогонализируем X
+                        spine_x = np.cross(spine_y, spine_z)
+                        norm_x = np.linalg.norm(spine_x)
+
+                        if norm_x > 1e-6:
+                            spine_x = spine_x / norm_x
+
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['spine'] = create_validated_axes(spine_x, spine_y, spine_z,
+                                                                            default_axes['spine'])
+
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('hips', default_axes['hips'])
+
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['spine']
+
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['spine']
+                                rotation_matrix = local_to_parent @ default.T
+
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    rotations['spine'] = R.from_matrix(rotation_matrix)
+                                else:
+                                    rotations['spine'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для spine: {e}")
+                                rotations['spine'] = R.identity()
+                        else:
+                            rotations['spine'] = R.identity()
+                    else:
+                        rotations['spine'] = R.identity()
+                else:
+                    rotations['spine'] = R.identity()
+
+            # Инициализируем шею и голову
+            rotations['neck'] = R.identity()
+            rotations['head'] = R.identity()
+
+            # 3. Левое плечо
+            if np.isnan(landmarks[11]).any() or np.isnan(landmarks[13]).any():
+                rotations['left_shoulder'] = R.identity()
+                local_axes['left_shoulder'] = default_axes['left_shoulder']
+            else:
+                left_arm_vector = landmarks[13] - landmarks[11]  # Левый локоть - левое плечо
+                norm_arm = np.linalg.norm(left_arm_vector)
+
+                if norm_arm > 1e-6:
+                    left_arm_vector = left_arm_vector / norm_arm
+
+                    # Z - основная ось руки (влево)
+                    shoulder_z = -left_arm_vector  # Направление к локтю
+
+                    # Y берем от позвоночника
+                    if 'spine' in local_axes:
+                        shoulder_y = local_axes['spine'][:, 1]
+                    else:
+                        shoulder_y = default_axes['spine'][:, 1]
+
+                    # X перпендикулярно Y и Z
+                    shoulder_x = np.cross(shoulder_y, shoulder_z)
+                    norm_x = np.linalg.norm(shoulder_x)
+
+                    if norm_x > 1e-6:
+                        shoulder_x = shoulder_x / norm_x
+
+                        # Переортогонализируем Y
+                        shoulder_y = np.cross(shoulder_z, shoulder_x)
+                        norm_y = np.linalg.norm(shoulder_y)
+
+                        if norm_y > 1e-6:
+                            shoulder_y = shoulder_y / norm_y
+
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['left_shoulder'] = create_validated_axes(shoulder_x, shoulder_y, shoulder_z,
+                                                                                    default_axes['left_shoulder'])
+
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('spine', default_axes['spine'])
+
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['left_shoulder']
+
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['left_shoulder']
+                                rotation_matrix = local_to_parent @ default.T
+
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
+
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], -80, 130)  # Сгибание вперед/назад
+                                    euler[1] = np.clip(euler[1], -30, 170)  # Отведение в сторону
+                                    euler[2] = np.clip(euler[2], -90, 90)  # Вращение
+
+                                    rotations['left_shoulder'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['left_shoulder'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для left_shoulder: {e}")
+                                rotations['left_shoulder'] = R.identity()
+                        else:
                             rotations['left_shoulder'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для left_shoulder")
+                    else:
                         rotations['left_shoulder'] = R.identity()
                 else:
                     rotations['left_shoulder'] = R.identity()
+
+            # 4. Правое плечо
+            if np.isnan(landmarks[12]).any() or np.isnan(landmarks[14]).any():
+                rotations['right_shoulder'] = R.identity()
+                local_axes['right_shoulder'] = default_axes['right_shoulder']
             else:
-                rotations['left_shoulder'] = R.identity()
+                right_arm_vector = landmarks[14] - landmarks[12]  # Правый локоть - правое плечо
+                norm_arm = np.linalg.norm(right_arm_vector)
 
-            # 5. Правое плечо (аналогично левому)
-            right_arm_vector = landmarks[14] - landmarks[12]  # Правый локоть - правое плечо
-            norm_arm = np.linalg.norm(right_arm_vector)
+                if norm_arm > 1e-6:
+                    right_arm_vector = right_arm_vector / norm_arm
 
-            if norm_arm > 1e-6:
-                right_arm_vector = right_arm_vector / norm_arm
+                    # Z - основная ось руки (вправо)
+                    shoulder_z = right_arm_vector  # Направление к локтю
 
-                # Z - основная ось руки (вправо)
-                shoulder_z = right_arm_vector  # Направление к локтю
-
-                # Y берем от позвоночника
-                if 'spine' in local_axes:
-                    shoulder_y = local_axes['spine'][:, 1]
-                else:
-                    shoulder_y = np.array([0, 1, 0])
-
-                # X перпендикулярно Y и Z
-                shoulder_x = np.cross(shoulder_y, shoulder_z)
-                norm_x = np.linalg.norm(shoulder_x)
-
-                if norm_x > 1e-6:
-                    shoulder_x = shoulder_x / norm_x
-
-                    # Переортогонализируем Y
-                    shoulder_y = np.cross(shoulder_z, shoulder_x)
-                    shoulder_y = shoulder_y / np.linalg.norm(shoulder_y)
-
-                    # Создаем матрицу локальных осей
-                    local_axes['right_shoulder'] = create_validated_axes(shoulder_x, shoulder_y, shoulder_z)
-
-                    # Получаем вращение в локальной системе координат родителя
+                    # Y берем от позвоночника
                     if 'spine' in local_axes:
-                        parent_axes = local_axes['spine']
+                        shoulder_y = local_axes['spine'][:, 1]
                     else:
-                        parent_axes = np.eye(3)
+                        shoulder_y = default_axes['spine'][:, 1]
 
-                    try:
-                        parent_inverse = np.linalg.inv(parent_axes)
-                        local_to_parent = parent_inverse @ local_axes['right_shoulder']
+                    # X перпендикулярно Y и Z
+                    shoulder_x = np.cross(shoulder_y, shoulder_z)
+                    norm_x = np.linalg.norm(shoulder_x)
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['right_shoulder']
-                        rotation_matrix = local_to_parent @ default.T
+                    if norm_x > 1e-6:
+                        shoulder_x = shoulder_x / norm_x
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                        # Переортогонализируем Y
+                        shoulder_y = np.cross(shoulder_z, shoulder_x)
+                        norm_y = np.linalg.norm(shoulder_y)
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], -80, 130)  # Сгибание вперед/назад
-                            euler[1] = np.clip(euler[1], -170, 30)  # Отведение в сторону
-                            euler[2] = np.clip(euler[2], -90, 90)  # Вращение
+                        if norm_y > 1e-6:
+                            shoulder_y = shoulder_y / norm_y
 
-                            rotations['right_shoulder'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(
-                                f"Невозможно создать вращение для right_shoulder, используем единичное вращение")
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['right_shoulder'] = create_validated_axes(shoulder_x, shoulder_y, shoulder_z,
+                                                                                     default_axes['right_shoulder'])
+
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('spine', default_axes['spine'])
+
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['right_shoulder']
+
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['right_shoulder']
+                                rotation_matrix = local_to_parent @ default.T
+
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
+
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], -80, 130)  # Сгибание вперед/назад
+                                    euler[1] = np.clip(euler[1], -170, 30)  # Отведение в сторону
+                                    euler[2] = np.clip(euler[2], -90, 90)  # Вращение
+
+                                    rotations['right_shoulder'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['right_shoulder'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для right_shoulder: {e}")
+                                rotations['right_shoulder'] = R.identity()
+                        else:
                             rotations['right_shoulder'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для right_shoulder")
+                    else:
                         rotations['right_shoulder'] = R.identity()
                 else:
                     rotations['right_shoulder'] = R.identity()
+
+            # 5. Левый локоть
+            if np.isnan(landmarks[13]).any() or np.isnan(landmarks[15]).any():
+                rotations['left_elbow'] = R.identity()
+                local_axes['left_elbow'] = default_axes['left_elbow']
             else:
-                rotations['right_shoulder'] = R.identity()
+                left_forearm_vector = landmarks[15] - landmarks[13]  # Левое запястье - левый локоть
+                norm_forearm = np.linalg.norm(left_forearm_vector)
 
-            # 6. Левый локоть
-            left_forearm_vector = landmarks[15] - landmarks[13]  # Левое запястье - левый локоть
-            norm_forearm = np.linalg.norm(left_forearm_vector)
+                if norm_forearm > 1e-6 and 'left_shoulder' in local_axes:
+                    left_forearm_vector = left_forearm_vector / norm_forearm
 
-            if norm_forearm > 1e-6 and 'left_shoulder' in local_axes:
-                left_forearm_vector = left_forearm_vector / norm_forearm
+                    # Z - основная ось предплечья (влево)
+                    elbow_z = -left_forearm_vector  # Направление к запястью
 
-                # Z - основная ось предплечья (влево)
-                elbow_z = -left_forearm_vector  # Направление к запястью
+                    # Используем X от плеча
+                    if 'left_shoulder' in local_axes:
+                        elbow_x = local_axes['left_shoulder'][:, 0]
+                    else:
+                        elbow_x = default_axes['left_shoulder'][:, 0]
 
-                # Используем X от плеча
-                elbow_x = local_axes['left_shoulder'][:, 0]
+                    # Y перпендикулярно Z и X
+                    elbow_y = np.cross(elbow_z, elbow_x)
+                    norm_y = np.linalg.norm(elbow_y)
 
-                # Y перпендикулярно Z и X
-                elbow_y = np.cross(elbow_z, elbow_x)
-                norm_y = np.linalg.norm(elbow_y)
+                    if norm_y > 1e-6:
+                        elbow_y = elbow_y / norm_y
 
-                if norm_y > 1e-6:
-                    elbow_y = elbow_y / norm_y
+                        # Переортогонализируем X
+                        elbow_x = np.cross(elbow_y, elbow_z)
+                        norm_x = np.linalg.norm(elbow_x)
 
-                    # Переортогонализируем X
-                    elbow_x = np.cross(elbow_y, elbow_z)
-                    elbow_x = elbow_x / np.linalg.norm(elbow_x)
+                        if norm_x > 1e-6:
+                            elbow_x = elbow_x / norm_x
 
-                    # Создаем матрицу локальных осей
-                    local_axes['left_elbow'] = create_validated_axes(elbow_x, elbow_y, elbow_z)
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['left_elbow'] = create_validated_axes(elbow_x, elbow_y, elbow_z,
+                                                                                 default_axes['left_elbow'])
 
-                    # Получаем вращение в локальной системе координат родителя
-                    try:
-                        parent_inverse = np.linalg.inv(local_axes['left_shoulder'])
-                        local_to_parent = parent_inverse @ local_axes['left_elbow']
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('left_shoulder', default_axes['left_shoulder'])
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['left_elbow']
-                        rotation_matrix = local_to_parent @ default.T
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['left_elbow']
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['left_elbow']
+                                rotation_matrix = local_to_parent @ default.T
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], -10, 10)  # Очень мало вращения по X
-                            euler[1] = np.clip(euler[1], -150, 0)  # Сгибание локтя (только в одну сторону)
-                            euler[2] = np.clip(euler[2], -10, 10)  # Очень мало вращения по Z
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
 
-                            rotations['left_elbow'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(f"Невозможно создать вращение для left_elbow, используем единичное вращение")
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], -10, 10)  # Очень мало вращения по X
+                                    euler[1] = np.clip(euler[1], -150, 0)  # Сгибание локтя (только в одну сторону)
+                                    euler[2] = np.clip(euler[2], -10, 10)  # Очень мало вращения по Z
+
+                                    rotations['left_elbow'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['left_elbow'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для left_elbow: {e}")
+                                rotations['left_elbow'] = R.identity()
+                        else:
                             rotations['left_elbow'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для left_elbow")
+                    else:
                         rotations['left_elbow'] = R.identity()
-
-                    # Добавляем левое запястье (без дополнительного вращения)
-                    rotations['left_wrist'] = R.identity()
                 else:
                     rotations['left_elbow'] = R.identity()
-                    rotations['left_wrist'] = R.identity()
+
+            # Инициализация left_wrist
+            rotations['left_wrist'] = R.identity()
+
+            # 6. Правый локоть
+            if np.isnan(landmarks[14]).any() or np.isnan(landmarks[16]).any():
+                rotations['right_elbow'] = R.identity()
+                local_axes['right_elbow'] = default_axes['right_elbow']
             else:
-                rotations['left_elbow'] = R.identity()
-                rotations['left_wrist'] = R.identity()
+                right_forearm_vector = landmarks[16] - landmarks[14]  # Правое запястье - правый локоть
+                norm_forearm = np.linalg.norm(right_forearm_vector)
 
-            # 7. Правый локоть (аналогично левому)
-            right_forearm_vector = landmarks[16] - landmarks[14]  # Правое запястье - правый локоть
-            norm_forearm = np.linalg.norm(right_forearm_vector)
+                if norm_forearm > 1e-6 and 'right_shoulder' in local_axes:
+                    right_forearm_vector = right_forearm_vector / norm_forearm
 
-            if norm_forearm > 1e-6 and 'right_shoulder' in local_axes:
-                right_forearm_vector = right_forearm_vector / norm_forearm
+                    # Z - основная ось предплечья (вправо)
+                    elbow_z = right_forearm_vector  # Направление к запястью
 
-                # Z - основная ось предплечья (вправо)
-                elbow_z = right_forearm_vector  # Направление к запястью
+                    # Используем X от плеча
+                    if 'right_shoulder' in local_axes:
+                        elbow_x = local_axes['right_shoulder'][:, 0]
+                    else:
+                        elbow_x = default_axes['right_shoulder'][:, 0]
 
-                # Используем X от плеча
-                elbow_x = local_axes['right_shoulder'][:, 0]
+                    # Y перпендикулярно Z и X
+                    elbow_y = np.cross(elbow_z, elbow_x)
+                    norm_y = np.linalg.norm(elbow_y)
 
-                # Y перпендикулярно Z и X
-                elbow_y = np.cross(elbow_z, elbow_x)
-                norm_y = np.linalg.norm(elbow_y)
+                    if norm_y > 1e-6:
+                        elbow_y = elbow_y / norm_y
 
-                if norm_y > 1e-6:
-                    elbow_y = elbow_y / norm_y
+                        # Переортогонализируем X
+                        elbow_x = np.cross(elbow_y, elbow_z)
+                        norm_x = np.linalg.norm(elbow_x)
 
-                    # Переортогонализируем X
-                    elbow_x = np.cross(elbow_y, elbow_z)
-                    elbow_x = elbow_x / np.linalg.norm(elbow_x)
+                        if norm_x > 1e-6:
+                            elbow_x = elbow_x / norm_x
 
-                    # Создаем матрицу локальных осей
-                    local_axes['right_elbow'] = create_validated_axes(elbow_x, elbow_y, elbow_z)
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['right_elbow'] = create_validated_axes(elbow_x, elbow_y, elbow_z,
+                                                                                  default_axes['right_elbow'])
 
-                    # Получаем вращение в локальной системе координат родителя
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('right_shoulder', default_axes['right_shoulder'])
 
-                    try:
-                        parent_inverse = np.linalg.inv(local_axes['right_shoulder'])
-                        local_to_parent = parent_inverse @ local_axes['right_elbow']
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['right_elbow']
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['right_elbow']
-                        rotation_matrix = local_to_parent @ default.T
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['right_elbow']
+                                rotation_matrix = local_to_parent @ default.T
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], -10, 10)  # Очень мало вращения по X
-                            euler[1] = np.clip(euler[1], -150, 0)  # Сгибание локтя (только в одну сторону)
-                            euler[2] = np.clip(euler[2], -10, 10)  # Очень мало вращения по Z
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], -10, 10)  # Очень мало вращения по X
+                                    euler[1] = np.clip(euler[1], -150, 0)  # Сгибание локтя (только в одну сторону)
+                                    euler[2] = np.clip(euler[2], -10, 10)  # Очень мало вращения по Z
 
-                            rotations['right_elbow'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(
-                                f"Невозможно создать вращение для right_elbow, используем единичное вращение")
+                                    rotations['right_elbow'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['right_elbow'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для right_elbow: {e}")
+                                rotations['right_elbow'] = R.identity()
+                        else:
                             rotations['right_elbow'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для right_elbow")
+                    else:
                         rotations['right_elbow'] = R.identity()
-
-                    # Добавляем правое запястье (без дополнительного вращения)
-                    rotations['right_wrist'] = R.identity()
                 else:
                     rotations['right_elbow'] = R.identity()
-                    rotations['right_wrist'] = R.identity()
 
-                # 8. Левое бедро
-            left_thigh_vector = landmarks[25] - landmarks[23]  # Левое колено - левое бедро
-            norm_thigh = np.linalg.norm(left_thigh_vector)
+            # Инициализация right_wrist
+            rotations['right_wrist'] = R.identity()
 
-            if norm_thigh > 1e-6:
-                left_thigh_vector = left_thigh_vector / norm_thigh
+            # 7. Левое бедро
+            if np.isnan(landmarks[23]).any() or np.isnan(landmarks[25]).any():
+                rotations['left_hip'] = R.identity()
+                local_axes['left_hip'] = default_axes['left_hip']
+            else:
+                left_thigh_vector = landmarks[25] - landmarks[23]  # Левое колено - левое бедро
+                norm_thigh = np.linalg.norm(left_thigh_vector)
 
-                # Y - основная ось ноги (вниз)
-                hip_y = -left_thigh_vector  # Направление к колену
+                if norm_thigh > 1e-6:
+                    left_thigh_vector = left_thigh_vector / norm_thigh
 
-                # X берем от таза
-                if 'hips' in local_axes:
-                    hip_x = local_axes['hips'][:, 0]
-                else:
-                    hip_x = np.array([1, 0, 0])
+                    # Y - основная ось ноги (вниз)
+                    hip_y = -left_thigh_vector  # Направление к колену
 
-                # Z перпендикулярно X и Y
-                hip_z = np.cross(hip_x, hip_y)
-                norm_z = np.linalg.norm(hip_z)
-
-                if norm_z > 1e-6:
-                    hip_z = hip_z / norm_z
-
-                    # Переортогонализируем X
-                    hip_x = np.cross(hip_y, hip_z)
-                    hip_x = hip_x / np.linalg.norm(hip_x)
-
-                    # Создаем матрицу локальных осей
-                    local_axes['left_hip'] = create_validated_axes(hip_x, hip_y, hip_z)
-
-                    # Получаем вращение в локальной системе координат родителя
+                    # X берем от таза
                     if 'hips' in local_axes:
-                        parent_axes = local_axes['hips']
+                        hip_x = local_axes['hips'][:, 0]
                     else:
-                        parent_axes = np.eye(3)
+                        hip_x = default_axes['hips'][:, 0]
 
-                    try:
-                        parent_inverse = np.linalg.inv(parent_axes)
-                        local_to_parent = parent_inverse @ local_axes['left_hip']
+                    # Z перпендикулярно X и Y
+                    hip_z = np.cross(hip_x, hip_y)
+                    norm_z = np.linalg.norm(hip_z)
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['left_hip']
-                        rotation_matrix = local_to_parent @ default.T
+                    if norm_z > 1e-6:
+                        hip_z = hip_z / norm_z
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                        # Переортогонализируем X
+                        hip_x = np.cross(hip_y, hip_z)
+                        norm_x = np.linalg.norm(hip_x)
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], -120, 45)  # Сгибание вперед/назад
-                            euler[1] = np.clip(euler[1], -70, 70)  # Отведение в стороны
-                            euler[2] = np.clip(euler[2], -45, 45)  # Вращение
+                        if norm_x > 1e-6:
+                            hip_x = hip_x / norm_x
 
-                            rotations['left_hip'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(f"Невозможно создать вращение для left_hip, используем единичное вращение")
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['left_hip'] = create_validated_axes(hip_x, hip_y, hip_z,
+                                                                               default_axes['left_hip'])
+
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('hips', default_axes['hips'])
+
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['left_hip']
+
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['left_hip']
+                                rotation_matrix = local_to_parent @ default.T
+
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
+
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], -120, 45)  # Сгибание вперед/назад
+                                    euler[1] = np.clip(euler[1], -70, 70)  # Отведение в стороны
+                                    euler[2] = np.clip(euler[2], -45, 45)  # Вращение
+
+                                    rotations['left_hip'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['left_hip'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для left_hip: {e}")
+                                rotations['left_hip'] = R.identity()
+                        else:
                             rotations['left_hip'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для left_hip")
+                    else:
                         rotations['left_hip'] = R.identity()
                 else:
                     rotations['left_hip'] = R.identity()
+
+            # 8. Правое бедро
+            if np.isnan(landmarks[24]).any() or np.isnan(landmarks[26]).any():
+                rotations['right_hip'] = R.identity()
+                local_axes['right_hip'] = default_axes['right_hip']
             else:
-                rotations['left_hip'] = R.identity()
+                right_thigh_vector = landmarks[26] - landmarks[24]  # Правое колено - правое бедро
+                norm_thigh = np.linalg.norm(right_thigh_vector)
 
-            # 9. Правое бедро (аналогично левому)
-            right_thigh_vector = landmarks[26] - landmarks[24]  # Правое колено - правое бедро
-            norm_thigh = np.linalg.norm(right_thigh_vector)
+                if norm_thigh > 1e-6:
+                    right_thigh_vector = right_thigh_vector / norm_thigh
 
-            if norm_thigh > 1e-6:
-                right_thigh_vector = right_thigh_vector / norm_thigh
+                    # Y - основная ось ноги (вниз)
+                    hip_y = -right_thigh_vector  # Направление к колену
 
-                # Y - основная ось ноги (вниз)
-                hip_y = -right_thigh_vector  # Направление к колену
-
-                # X берем от таза
-                if 'hips' in local_axes:
-                    hip_x = local_axes['hips'][:, 0]
-                else:
-                    hip_x = np.array([1, 0, 0])
-
-                # Z перпендикулярно X и Y
-                hip_z = np.cross(hip_x, hip_y)
-                norm_z = np.linalg.norm(hip_z)
-
-                if norm_z > 1e-6:
-                    hip_z = hip_z / norm_z
-
-                    # Переортогонализируем X
-                    hip_x = np.cross(hip_y, hip_z)
-                    hip_x = hip_x / np.linalg.norm(hip_x)
-
-                    # Создаем матрицу локальных осей
-                    local_axes['right_hip'] = create_validated_axes(hip_x, hip_y, hip_z)
-
-                    # Получаем вращение в локальной системе координат родителя
+                    # X берем от таза
                     if 'hips' in local_axes:
-                        parent_axes = local_axes['hips']
+                        hip_x = local_axes['hips'][:, 0]
                     else:
-                        parent_axes = np.eye(3)
+                        hip_x = default_axes['hips'][:, 0]
 
-                    try:
-                        parent_inverse = np.linalg.inv(parent_axes)
-                        local_to_parent = parent_inverse @ local_axes['right_hip']
+                    # Z перпендикулярно X и Y
+                    hip_z = np.cross(hip_x, hip_y)
+                    norm_z = np.linalg.norm(hip_z)
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['right_hip']
-                        rotation_matrix = local_to_parent @ default.T
+                    if norm_z > 1e-6:
+                        hip_z = hip_z / norm_z
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                        # Переортогонализируем X
+                        hip_x = np.cross(hip_y, hip_z)
+                        norm_x = np.linalg.norm(hip_x)
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], -120, 45)  # Сгибание вперед/назад
-                            euler[1] = np.clip(euler[1], -70, 70)  # Отведение в стороны
-                            euler[2] = np.clip(euler[2], -45, 45)  # Вращение
+                        if norm_x > 1e-6:
+                            hip_x = hip_x / norm_x
 
-                            rotations['right_hip'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(f"Невозможно создать вращение для right_hip, используем единичное вращение")
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['right_hip'] = create_validated_axes(hip_x, hip_y, hip_z,
+                                                                                default_axes['right_hip'])
+
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('hips', default_axes['hips'])
+
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['right_hip']
+
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['right_hip']
+                                rotation_matrix = local_to_parent @ default.T
+
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
+
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], -120, 45)  # Сгибание вперед/назад
+                                    euler[1] = np.clip(euler[1], -70, 70)  # Отведение в стороны
+                                    euler[2] = np.clip(euler[2], -45, 45)  # Вращение
+
+                                    rotations['right_hip'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['right_hip'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для right_hip: {e}")
+                                rotations['right_hip'] = R.identity()
+                        else:
                             rotations['right_hip'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для right_hip")
+                    else:
                         rotations['right_hip'] = R.identity()
                 else:
                     rotations['right_hip'] = R.identity()
+
+            # 9. Левое колено
+            if np.isnan(landmarks[25]).any() or np.isnan(landmarks[27]).any():
+                rotations['left_knee'] = R.identity()
+                local_axes['left_knee'] = default_axes['left_knee']
             else:
-                rotations['right_hip'] = R.identity()
+                left_shin_vector = landmarks[27] - landmarks[25]  # Левая лодыжка - левое колено
+                norm_shin = np.linalg.norm(left_shin_vector)
 
-            # 10. Левое колено
-            left_shin_vector = landmarks[27] - landmarks[25]  # Левая лодыжка - левое колено
-            norm_shin = np.linalg.norm(left_shin_vector)
+                if norm_shin > 1e-6:
+                    left_shin_vector = left_shin_vector / norm_shin
 
-            if norm_shin > 1e-6 and 'left_hip' in local_axes:
-                left_shin_vector = left_shin_vector / norm_shin
+                    # Y - основная ось голени (вниз)
+                    knee_y = -left_shin_vector  # Направление к лодыжке
 
-                # Y - основная ось голени (вниз)
-                knee_y = -left_shin_vector  # Направление к лодыжке
+                    # Используем X от бедра
+                    if 'left_hip' in local_axes:
+                        knee_x = local_axes['left_hip'][:, 0]
+                    else:
+                        knee_x = default_axes['left_hip'][:, 0]
 
-                # Используем X от бедра
-                knee_x = local_axes['left_hip'][:, 0]
+                    # Z перпендикулярно X и Y
+                    knee_z = np.cross(knee_x, knee_y)
+                    norm_z = np.linalg.norm(knee_z)
 
-                # Z перпендикулярно X и Y
-                knee_z = np.cross(knee_x, knee_y)
-                norm_z = np.linalg.norm(knee_z)
+                    if norm_z > 1e-6:
+                        knee_z = knee_z / norm_z
 
-                if norm_z > 1e-6:
-                    knee_z = knee_z / norm_z
+                        # Переортогонализируем X
+                        knee_x = np.cross(knee_y, knee_z)
+                        norm_x = np.linalg.norm(knee_x)
 
-                    # Переортогонализируем X
-                    knee_x = np.cross(knee_y, knee_z)
-                    knee_x = knee_x / np.linalg.norm(knee_x)
+                        if norm_x > 1e-6:
+                            knee_x = knee_x / norm_x
 
-                    # Создаем матрицу локальных осей
-                    local_axes['left_knee'] = create_validated_axes(knee_x, knee_y, knee_z)
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['left_knee'] = create_validated_axes(knee_x, knee_y, knee_z,
+                                                                                default_axes['left_knee'])
 
-                    # Получаем вращение в локальной системе координат родителя
-                    try:
-                        parent_inverse = np.linalg.inv(local_axes['left_hip'])
-                        local_to_parent = parent_inverse @ local_axes['left_knee']
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('left_hip', default_axes['left_hip'])
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['left_knee']
-                        rotation_matrix = local_to_parent @ default.T
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['left_knee']
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['left_knee']
+                                rotation_matrix = local_to_parent @ default.T
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], 0, 160)  # Сгибание колена (в основном в этой оси)
-                            euler[1] = np.clip(euler[1], -5, 5)  # Минимальное отклонение в стороны
-                            euler[2] = np.clip(euler[2], -5, 5)  # Минимальное вращение
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
 
-                            rotations['left_knee'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(f"Невозможно создать вращение для left_knee, используем единичное вращение")
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], 0, 160)  # Сгибание колена (в основном в этой оси)
+                                    euler[1] = np.clip(euler[1], -5, 5)  # Минимальное отклонение в стороны
+                                    euler[2] = np.clip(euler[2], -5, 5)  # Минимальное вращение
+
+                                    rotations['left_knee'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['left_knee'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для left_knee: {e}")
+                                rotations['left_knee'] = R.identity()
+                        else:
                             rotations['left_knee'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для left_knee")
+                    else:
                         rotations['left_knee'] = R.identity()
                 else:
                     rotations['left_knee'] = R.identity()
+
+            # 10. Правое колено
+            if np.isnan(landmarks[26]).any() or np.isnan(landmarks[28]).any():
+                rotations['right_knee'] = R.identity()
+                local_axes['right_knee'] = default_axes['right_knee']
             else:
-                rotations['left_knee'] = R.identity()
+                right_shin_vector = landmarks[28] - landmarks[26]  # Правая лодыжка - правое колено
+                norm_shin = np.linalg.norm(right_shin_vector)
 
-            # 11. Правое колено (аналогично левому)
-            right_shin_vector = landmarks[28] - landmarks[26]  # Правая лодыжка - правое колено
-            norm_shin = np.linalg.norm(right_shin_vector)
+                if norm_shin > 1e-6:
+                    right_shin_vector = right_shin_vector / norm_shin
 
-            if norm_shin > 1e-6 and 'right_hip' in local_axes:
-                right_shin_vector = right_shin_vector / norm_shin
+                    # Y - основная ось голени (вниз)
+                    knee_y = -right_shin_vector  # Направление к лодыжке
 
-                # Y - основная ось голени (вниз)
-                knee_y = -right_shin_vector  # Направление к лодыжке
+                    # Используем X от бедра
+                    if 'right_hip' in local_axes:
+                        knee_x = local_axes['right_hip'][:, 0]
+                    else:
+                        knee_x = default_axes['right_hip'][:, 0]
 
-                # Используем X от бедра
-                knee_x = local_axes['right_hip'][:, 0]
+                    # Z перпендикулярно X и Y
+                    knee_z = np.cross(knee_x, knee_y)
+                    norm_z = np.linalg.norm(knee_z)
 
-                # Z перпендикулярно X и Y
-                knee_z = np.cross(knee_x, knee_y)
-                norm_z = np.linalg.norm(knee_z)
+                    if norm_z > 1e-6:
+                        knee_z = knee_z / norm_z
 
-                if norm_z > 1e-6:
-                    knee_z = knee_z / norm_z
+                        # Переортогонализируем X
+                        knee_x = np.cross(knee_y, knee_z)
+                        norm_x = np.linalg.norm(knee_x)
 
-                    # Переортогонализируем X
-                    knee_x = np.cross(knee_y, knee_z)
-                    knee_x = knee_x / np.linalg.norm(knee_x)
+                        if norm_x > 1e-6:
+                            knee_x = knee_x / norm_x
 
-                    # Создаем матрицу локальных осей
-                    local_axes['right_knee'] = create_validated_axes(knee_x, knee_y, knee_z)
+                            # Создаем матрицу локальных осей
+                            try:
+                                local_axes['right_knee'] = create_validated_axes(knee_x, knee_y, knee_z,
+                                                                                 default_axes['right_knee'])
 
-                    # Получаем вращение в локальной системе координат родителя
-                    try:
-                        parent_inverse = np.linalg.inv(local_axes['right_hip'])
-                        local_to_parent = parent_inverse @ local_axes['right_knee']
+                                # Получаем вращение в локальной системе координат родителя
+                                parent_axes = local_axes.get('right_hip', default_axes['right_hip'])
 
-                        # Вычисляем вращение относительно осей по умолчанию
-                        default = default_axes['right_knee']
-                        rotation_matrix = local_to_parent @ default.T
+                                parent_inverse = np.linalg.inv(parent_axes)
+                                local_to_parent = parent_inverse @ local_axes['right_knee']
 
-                        try:
-                            # Сначала получаем вращение без ограничений
-                            rot = R.from_matrix(rotation_matrix)
+                                # Вычисляем вращение относительно осей по умолчанию
+                                default = default_axes['right_knee']
+                                rotation_matrix = local_to_parent @ default.T
 
-                            # Применяем ограничения к углам Эйлера
-                            euler = rot.as_euler('xyz', degrees=True)
-                            euler[0] = np.clip(euler[0], 0, 160)  # Сгибание колена (в основном в этой оси)
-                            euler[1] = np.clip(euler[1], -5, 5)  # Минимальное отклонение в стороны
-                            euler[2] = np.clip(euler[2], -5, 5)  # Минимальное вращение
+                                if not np.isnan(rotation_matrix).any() and abs(
+                                        np.linalg.det(rotation_matrix) - 1.0) < 0.1:
+                                    # Сначала получаем вращение без ограничений
+                                    rot = R.from_matrix(rotation_matrix)
 
-                            rotations['right_knee'] = R.from_euler('xyz', euler, degrees=True)
-                        except ValueError:
-                            logger.warning(f"Невозможно создать вращение для right_knee, используем единичное вращение")
+                                    # Применяем ограничения к углам Эйлера
+                                    euler = rot.as_euler('xyz', degrees=True)
+                                    euler[0] = np.clip(euler[0], 0, 160)  # Сгибание колена (в основном в этой оси)
+                                    euler[1] = np.clip(euler[1], -5, 5)  # Минимальное отклонение в стороны
+                                    euler[2] = np.clip(euler[2], -5, 5)  # Минимальное вращение
+
+                                    rotations['right_knee'] = R.from_euler('xyz', euler, degrees=True)
+                                else:
+                                    rotations['right_knee'] = R.identity()
+                            except Exception as e:
+                                logger.warning(f"Ошибка при расчете вращения для right_knee: {e}")
+                                rotations['right_knee'] = R.identity()
+                        else:
                             rotations['right_knee'] = R.identity()
-                    except np.linalg.LinAlgError:
-                        logger.warning("Ошибка при инвертировании матрицы для right_knee")
+                    else:
                         rotations['right_knee'] = R.identity()
                 else:
                     rotations['right_knee'] = R.identity()
-            else:
-                rotations['right_knee'] = R.identity()
 
-            # 12. Левая лодыжка
-            if 'left_knee' in local_axes:
-                # Для простоты используем единичное вращение
-                rotations['left_ankle'] = R.identity()
-            else:
-                rotations['left_ankle'] = R.identity()
-
-            # 13. Правая лодыжка
-            if 'right_knee' in local_axes:
-                # Для простоты используем единичное вращение
-                rotations['right_ankle'] = R.identity()
-            else:
-                rotations['right_ankle'] = R.identity()
-
-            # 14. Добавляем идентичные вращения для всех суставов, для которых не удалось вычислить корректные вращения
-            for joint in hierarchy.keys():
-                if joint not in rotations:
-                    rotations[joint] = R.identity()
+            # 11. Инициализируем лодыжки с идентичными вращениями
+            rotations['left_ankle'] = R.identity()
+            rotations['right_ankle'] = R.identity()
 
         except Exception as e:
             logger.error(f"Ошибка при вычислении вращений суставов: {str(e)}")
@@ -947,22 +1060,33 @@ class AnimationCalculator:
     def _rotation_between_vectors(self, v1: np.ndarray, v2: np.ndarray) -> R:
         """
         Вычисляет вращение от одного вектора к другому.
-        
+
         Args:
             v1: Исходный вектор
             v2: Целевой вектор
-            
+
         Returns:
             scipy.spatial.transform.Rotation: Объект вращения
         """
+        # Проверка на None или NaN
+        if v1 is None or v2 is None or np.isnan(v1).any() or np.isnan(v2).any():
+            return R.identity()
+
+        # Проверка на нулевые векторы
+        norm1 = np.linalg.norm(v1)
+        norm2 = np.linalg.norm(v2)
+
+        if norm1 < 1e-6 or norm2 < 1e-6:
+            return R.identity()
+
         # Нормализуем векторы
-        v1 = v1 / np.linalg.norm(v1)
-        v2 = v2 / np.linalg.norm(v2)
-        
+        v1 = v1 / norm1
+        v2 = v2 / norm2
+
         # Если векторы почти совпадают
         if np.allclose(v1, v2, rtol=1e-4, atol=1e-4):
             return R.identity()
-            
+
         # Если векторы противоположны
         if np.allclose(v1, -v2, rtol=1e-4, atol=1e-4):
             # Выбираем произвольную ось вращения, перпендикулярную v1
@@ -970,26 +1094,36 @@ class AnimationCalculator:
                 axis = np.cross(v1, [1, 0, 0])
             else:
                 axis = np.cross(v1, [0, 1, 0])
-            axis = axis / np.linalg.norm(axis)
+
+            # Проверка на нулевую ось вращения
+            axis_norm = np.linalg.norm(axis)
+            if axis_norm < 1e-6:
+                return R.identity()
+
+            axis = axis / axis_norm
             return R.from_rotvec(np.pi * axis)
-        
-        # Общий случай: используем кватернион вращения
-        # Вычисляем ось вращения (перпендикулярную обоим векторам)
-        axis = np.cross(v1, v2)
-        axis_norm = np.linalg.norm(axis)
-        
-        if axis_norm < 1e-6:
-            # Если ось вращения очень мала, векторы почти сонаправлены или противонаправлены
+
+        try:
+            # Общий случай: используем кватернион вращения
+            # Вычисляем ось вращения (перпендикулярную обоим векторам)
+            axis = np.cross(v1, v2)
+            axis_norm = np.linalg.norm(axis)
+
+            if axis_norm < 1e-6:
+                # Если ось вращения очень мала, векторы почти сонаправлены или противонаправлены
+                return R.identity()
+
+            axis = axis / axis_norm
+
+            # Вычисляем угол между векторами
+            cos_angle = np.clip(np.dot(v1, v2), -1.0, 1.0)
+            angle = np.arccos(cos_angle)
+
+            # Создаем вращение из оси и угла
+            return R.from_rotvec(axis * angle)
+        except Exception as e:
+            logger.warning(f"Ошибка при вычислении вращения между векторами: {e}")
             return R.identity()
-            
-        axis = axis / axis_norm
-        
-        # Вычисляем угол между векторами
-        cos_angle = np.clip(np.dot(v1, v2), -1.0, 1.0)
-        angle = np.arccos(cos_angle)
-        
-        # Создаем вращение из оси и угла
-        return R.from_rotvec(axis * angle)
 
     def process_sequence(self, points_3d: np.ndarray) -> Dict[str, Dict[str, np.ndarray]]:
         """
@@ -1001,40 +1135,118 @@ class AnimationCalculator:
         Returns:
             Dict: Словарь с параметрами анимации для каждого кадра
         """
-        num_frames = points_3d.shape[0]
+        num_frames, num_landmarks, coords_dim = points_3d.shape
         animation_params = {}
 
+        # Определение суставов, для которых будем вычислять вращения
+        joint_names = [
+            'hips', 'spine', 'neck', 'head',
+            'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow', 'left_wrist', 'right_wrist',
+            'left_hip', 'right_hip', 'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
+        ]
+
+        # Инициализируем массивы для вращений и позиций
+        for joint in joint_names:
+            animation_params[joint] = {
+                'euler': np.zeros((num_frames, 3)),  # Углы Эйлера в градусах
+                'quaternion': np.zeros((num_frames, 4)),  # [w, x, y, z]
+                'rotvec': np.zeros((num_frames, 3))  # Вектор вращения
+            }
+
+            # Заполняем NaN значениями
+            animation_params[joint]['euler'][:] = np.nan
+            animation_params[joint]['quaternion'][:] = np.nan
+            animation_params[joint]['rotvec'][:] = np.nan
+
+        # Обрабатываем каждый кадр
         for frame_idx in range(num_frames):
-            # Пропускаем кадр, если в нем есть NaN-значения
+            # Проверяем наличие NaN значений в кадре
             if np.isnan(points_3d[frame_idx]).any():
+                logger.debug(f"Кадр {frame_idx} содержит NaN значения, устанавливаем вращения по умолчанию")
+
+                # Устанавливаем идентичные вращения для кадров с NaN
+                for joint in joint_names:
+                    identity_rot = R.identity()
+                    animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
+                    animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
+                    animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
+
                 continue
-                
-            # Получаем данные для текущего кадра
-            frame_data = points_3d[frame_idx]
 
-            # Вычисляем вращения для суставов
-            joint_rotations = self.calculate_joint_rotations(frame_data)
+            try:
+                # Получаем данные для текущего кадра
+                frame_data = points_3d[frame_idx]
 
-            # Сохраняем данные для каждого сустава
-            for joint, rotation in joint_rotations.items():
-                if joint not in animation_params:
-                    animation_params[joint] = {
-                        'euler': np.zeros((num_frames, 3)),  # Углы Эйлера в градусах
-                        'quaternion': np.zeros((num_frames, 4)),  # [w, x, y, z]
-                        'rotvec': np.zeros((num_frames, 3))  # Вектор вращения
-                    }
+                # Дополнительная проверка валидности кадра
+                has_valid_data = True
+                for landmark_idx in [0, 11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]:
+                    if landmark_idx >= frame_data.shape[0] or np.isnan(frame_data[landmark_idx]).any():
+                        has_valid_data = False
+                        break
 
-                # Получаем различные представления вращения
-                animation_params[joint]['euler'][frame_idx] = rotation.as_euler('xyz', degrees=True)
-                animation_params[joint]['quaternion'][frame_idx] = rotation.as_quat()  # xyzw формат
-                animation_params[joint]['rotvec'][frame_idx] = rotation.as_rotvec()
+                if not has_valid_data:
+                    logger.debug(
+                        f"Кадр {frame_idx} не содержит всех необходимых точек, устанавливаем вращения по умолчанию")
+                    # Устанавливаем идентичные вращения для некачественных кадров
+                    for joint in joint_names:
+                        identity_rot = R.identity()
+                        animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
+                        animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
+                        animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
+                    continue
 
-        # Постобработка: меняем порядок элементов кватерниона с xyzw на wxyz
-        for joint in animation_params:
-            for frame_idx in range(num_frames):
-                xyzw = animation_params[joint]['quaternion'][frame_idx]
-                wxyz = np.array([xyzw[3], xyzw[0], xyzw[1], xyzw[2]])  # xyzw -> wxyz
-                animation_params[joint]['quaternion'][frame_idx] = wxyz
+                # Вычисляем вращения для суставов
+                joint_rotations = self.calculate_joint_rotations(frame_data)
+
+                # Сохраняем данные для каждого сустава
+                for joint, rotation in joint_rotations.items():
+                    if joint not in animation_params:
+                        continue
+
+                    try:
+                        # Получаем различные представления вращения
+                        animation_params[joint]['euler'][frame_idx] = rotation.as_euler('xyz', degrees=True)
+
+                        # scipy вращения хранят кватернионы в формате xyzw, переводим в wxyz
+                        quat_xyzw = rotation.as_quat()
+                        quat_wxyz = np.array([quat_xyzw[3], quat_xyzw[0], quat_xyzw[1], quat_xyzw[2]])
+                        animation_params[joint]['quaternion'][frame_idx] = quat_wxyz
+
+                        animation_params[joint]['rotvec'][frame_idx] = rotation.as_rotvec()
+                    except Exception as e:
+                        logger.warning(f"Ошибка при сохранении вращения для сустава {joint} в кадре {frame_idx}: {e}")
+                        # Устанавливаем идентичное вращение при ошибке
+                        identity_rot = R.identity()
+                        animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
+                        animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
+                        animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
+
+            except Exception as e:
+                logger.warning(f"Ошибка при обработке кадра {frame_idx}: {e}")
+                # Устанавливаем идентичные вращения для кадров с ошибками
+                for joint in joint_names:
+                    identity_rot = R.identity()
+                    animation_params[joint]['euler'][frame_idx] = identity_rot.as_euler('xyz', degrees=True)
+                    animation_params[joint]['quaternion'][frame_idx] = [1, 0, 0, 0]  # w, x, y, z
+                    animation_params[joint]['rotvec'][frame_idx] = [0, 0, 0]
+
+        # Постобработка: интерполируем пропущенные значения (NaN)
+        for joint in joint_names:
+            for param_type in ['euler', 'quaternion', 'rotvec']:
+                param_data = animation_params[joint][param_type]
+
+                # Проверяем наличие NaN значений
+                if np.isnan(param_data).any():
+                    # Заменяем NaN значениями по умолчанию
+                    if param_type == 'quaternion':
+                        default_value = [1, 0, 0, 0]  # w, x, y, z для кватернионов
+                    else:
+                        default_value = [0, 0, 0]  # для euler и rotvec
+
+                    # Заменяем все NaN значения
+                    for i in range(param_data.shape[0]):
+                        if np.isnan(param_data[i]).any():
+                            param_data[i] = default_value
 
         return animation_params
 
