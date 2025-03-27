@@ -1,14 +1,41 @@
-import pandas as pd
-import numpy as np
+import json
 
-# Загрузка данных
-df = pd.read_csv(r"C:\Users\vczyp\PycharmProjects\MoCap\openmocap\core\output_data\refined_points_3d.csv",
-                 comment='#')
 
-# Вариант 1: Удаление строк, где слишком много NaN
-# Например, если больше 50% точек отсутствует
-threshold = 33 * 3 * 0.5  # 50% от всех координат
-filtered_df = df.dropna(thresh=threshold)  # Удаляем строки, где меньше threshold не-NaN значений
+def load_and_filter_json(input_path, output_path):
+    # Загрузка JSON файла
+    with open(input_path, 'r') as f:
+        data = json.load(f)
 
-# Сохранение результатов
-filtered_df.to_csv(r'C:\Users\vczyp\PycharmProjects\MoCap\openmocap\core\output_data\filtered_no_nan_frames.csv', index=False)
+    # Получаем полный список всех точек скелета из metadata
+    all_joints = set(data['metadata']['joint_mapping'].keys())
+
+    # Фильтруем кадры
+    filtered_frames = []
+    for frame in data['frames']:
+        # Получаем точки, присутствующие в текущем кадре
+        present_joints = set(frame.keys())
+
+        # Если все точки присутствуют, сохраняем кадр
+        if present_joints == all_joints:
+            filtered_frames.append(frame)
+
+    # Заменяем кадры в данных на отфильтрованные
+    data['frames'] = filtered_frames
+
+    # Обновляем количество кадров в metadata
+    data['metadata']['frame_count'] = len(filtered_frames)
+    data['metadata']['duration'] = len(filtered_frames) / data['metadata']['fps']
+
+    # Сохраняем результат
+    with open(output_path, 'w') as f:
+        json.dump(data, f, indent=2)
+
+    print(f"Исходное количество кадров: {len(data['frames']) + len(filtered_frames) - len(filtered_frames)}")
+    print(f"Оставшееся количество кадров: {len(filtered_frames)}")
+
+
+# Пример использования
+input_json_path = r"C:\Users\vczyp\PycharmProjects\MoCap\openmocap\core\output_data\refined_points_3d.json"  # Замените на путь к вашему файлу
+output_json_path = r"C:\Users\vczyp\PycharmProjects\MoCap\openmocap\core\output_data\clean_points_3d.json"  # Куда сохранить результат
+
+load_and_filter_json(input_json_path, output_json_path)

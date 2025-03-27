@@ -40,87 +40,80 @@ class MediaPipeTracker(BaseTracker):
     """
 
     # Словарь с именами ориентиров MediaPipe Pose
-    POSE_LANDMARK_NAMES = [
-        'nose',
-        'left_eye_inner',
-        'left_eye',
-        'left_eye_outer',
-        'right_eye_inner',
-        'right_eye',
-        'right_eye_outer',
-        'left_ear',
-        'right_ear',
-        'mouth_left',
-        'mouth_right',
-        'left_shoulder',
-        'right_shoulder',
-        'left_elbow',
-        'right_elbow',
-        'left_wrist',
-        'right_wrist',
-        'left_pinky',
-        'right_pinky',
-        'left_index',
-        'right_index',
-        'left_thumb',
-        'right_thumb',
-        'left_hip',
-        'right_hip',
-        'left_knee',
-        'right_knee',
-        'left_ankle',
-        'right_ankle',
-        'left_heel',
-        'right_heel',
-        'left_foot_index',
-        'right_foot_index'
-    ]
-
-    # Индексы соединений костей MediaPipe Pose
-    POSE_CONNECTIONS = [
-        # Туловище
-        # Соединяем центр бедер с центром плеч (spine)
-        (23, 11), (23, 12),  # левое бедро - левое/правое плечо
-        (24, 11), (24, 12),  # правое бедро - левое/правое плечо
-        (23, 24),  # соединение бедер (pelvis/hips)
-        (11, 12),  # соединение плеч (chest)
+    SKELETON_LANDMARK_NAMES = [
+        # Центральная линия (позвоночник)
+        'pelvis',  # 0 - таз (центр бедер)
+        'spine',  # 1 - нижняя часть позвоночника
+        'spine.001',  # 2 - позвоночник (лумбарный)
+        'spine.002',  # 3 - позвоночник (грудной)
+        'spine.003',  # 4 - позвоночник (верхний грудной)
+        'spine.004',  # 5 - позвоночник (нижний шейный)
+        'spine.005',  # 6 - шея
+        'spine.006',  # 7 - голова
 
         # Левая рука
-        (11, 13),  # левое плечо - левый локоть (upper_arm.L)
-        (13, 15),  # левый локоть - левое запястье (forearm.L)
-        # Пальцы левой руки
-        (15, 17),  # запястье - мизинец
-        (15, 19),  # запястье - указательный
-        (15, 21),  # запястье - большой
+        'shoulder.L',  # 8 - левое плечо
+        'upper_arm.L',  # 9 - левое предплечье
+        'forearm.L',  # 10 - левое предплечье
+        'hand.L',  # 11 - левая кисть
 
         # Правая рука
-        (12, 14),  # правое плечо - правый локоть (upper_arm.R)
-        (14, 16),  # правый локоть - правое запястье (forearm.R)
-        # Пальцы правой руки
-        (16, 18),  # запястье - мизинец
-        (16, 20),  # запястье - указательный
-        (16, 22),  # запястье - большой
+        'shoulder.R',  # 12 - правое плечо
+        'upper_arm.R',  # 13 - правое предплечье
+        'forearm.R',  # 14 - правое предплечье
+        'hand.R',  # 15 - правая кисть
 
         # Левая нога
-        (23, 25),  # левое бедро - левое колено (thigh.L)
-        (25, 27),  # левое колено - левая лодыжка (shin.L)
-        (27, 31),  # левая лодыжка - левый носок (foot.L to toes)
-        (27, 29),  # левая лодыжка - левая пятка
+        'thigh.L',  # 16 - левое бедро
+        'shin.L',  # 17 - левая голень
+        'foot.L',  # 18 - левая стопа
+        'heel.L',  # 19 - левая пятка
+        'toe.L',  # 20 - левые пальцы ноги
 
         # Правая нога
-        (24, 26),  # правое бедро - правое колено (thigh.R)
-        (26, 28),  # правое колено - правая лодыжка (shin.R)
-        (28, 32),  # правая лодыжка - правый носок (foot.R to toes)
-        (28, 30),  # правая лодыжка - правая пятка
+        'thigh.R',  # 21 - правое бедро
+        'shin.R',  # 22 - правая голень
+        'foot.R',  # 23 - правая стопа
+        'heel.R',  # 24 - правая пятка
+        'toe.R'  # 25 - правые пальцы ноги
+    ]
 
-        # Голова и шея
-        # Соединяем центр плеч с носом (для представления шеи и головы)
-        (0, 11), (0, 12),  # нос - левое/правое плечо
+    # Соединения между точками (определение костей)
+    SKELETON_CONNECTIONS = [
+        # Позвоночник
+        (0, 1),  # pelvis -> spine
+        (1, 2),  # spine -> spine.001
+        (2, 3),  # spine.001 -> spine.002
+        (3, 4),  # spine.002 -> spine.003
+        (4, 5),  # spine.003 -> spine.004
+        (5, 6),  # spine.004 -> spine.005 (шея)
+        (6, 7),  # spine.005 -> spine.006 (голова)
 
-        # Лицо (опционально, можно убрать для упрощения)
-        (0, 1), (1, 2), (2, 3), (3, 7),  # Левая сторона лица
-        (0, 4), (4, 5), (5, 6), (6, 8),  # Правая сторона лица
-        (9, 10)  # Рот
+        # Левая рука
+        (4, 8),  # spine.003 -> shoulder.L
+        (8, 9),  # shoulder.L -> upper_arm.L
+        (9, 10),  # upper_arm.L -> forearm.L
+        (10, 11),  # forearm.L -> hand.L
+
+        # Правая рука
+        (4, 12),  # spine.003 -> shoulder.R
+        (12, 13),  # shoulder.R -> upper_arm.R
+        (13, 14),  # upper_arm.R -> forearm.R
+        (14, 15),  # forearm.R -> hand.R
+
+        # Левая нога
+        (0, 16),  # pelvis -> thigh.L
+        (16, 17),  # thigh.L -> shin.L
+        (17, 18),  # shin.L -> foot.L
+        (18, 19),  # foot.L -> heel.L
+        (18, 20),  # foot.L -> toe.L
+
+        # Правая нога
+        (0, 21),  # pelvis -> thigh.R
+        (21, 22),  # thigh.R -> shin.R
+        (22, 23),  # shin.R -> foot.R
+        (23, 24),  # foot.R -> heel.R
+        (23, 25)  # foot.R -> toe.R
     ]
 
     def __init__(
@@ -134,20 +127,13 @@ class MediaPipeTracker(BaseTracker):
             smooth_landmarks: bool = True,
             name: str = "mediapipe_tracker",
             config: Optional[Dict] = None,
-    ):
+            SKELETON_LANDMARK_NAMES=SKELETON_LANDMARK_NAMES,
+            SKELETON_CONNECTIONS=SKELETON_CONNECTIONS):
         """
         Инициализирует объект трекера MediaPipe.
 
         Args:
-            model_complexity: Сложность модели (0, 1 или 2)
-            enable_segmentation: Включение сегментации
-            min_detection_confidence: Минимальный порог уверенности для обнаружения
-            min_tracking_confidence: Минимальный порог уверенности для отслеживания
-            track_face: Отслеживать точки лица
-            track_hands: Отслеживать точки рук
-            smooth_landmarks: Сглаживать координаты точек
-            name: Имя трекера
-            config: Словарь с конфигурационными параметрами
+            ...
         """
         super().__init__(name=name, config=config or {})
 
@@ -164,8 +150,8 @@ class MediaPipeTracker(BaseTracker):
         self.mp_hands = mp.solutions.hands
         self.mp_face_mesh = mp.solutions.face_mesh
 
-        # Инициализация точек и имен
-        self.landmark_names = self.POSE_LANDMARK_NAMES.copy()
+        # Инициализация точек и имен для скелета Blender
+        self.landmark_names = SKELETON_LANDMARK_NAMES
         self.num_tracked_points = len(self.landmark_names)
 
         # Создание экземпляров моделей
@@ -174,7 +160,7 @@ class MediaPipeTracker(BaseTracker):
         # Загрузка информации о скелетной модели
         self.skeleton_model = SkeletonModel(
             landmark_names=self.landmark_names,
-            connections=self.POSE_CONNECTIONS
+            connections=SKELETON_CONNECTIONS
         )
 
         logger.info(f"Инициализирован трекер MediaPipe: {name}")
@@ -208,6 +194,94 @@ class MediaPipeTracker(BaseTracker):
                 min_tracking_confidence=self.min_tracking_confidence
             )
 
+    def map_mediapipe_to_blender_skeleton(self, landmarks: np.ndarray) -> np.ndarray:
+        """
+        Конвертирует 33 точки MediaPipe в 26 точек скелета Blender.
+
+        Args:
+            landmarks: Массив точек MediaPipe формы (33, 3)
+
+        Returns:
+            np.ndarray: Массив точек Blender-скелета формы (26, 3)
+        """
+        # Создаем массив для новых точек
+        blender_points = np.full((26, 3), np.nan)
+
+        # Для упрощения доступа
+        mp = landmarks  # MediaPipe точки
+
+        # Таз (центр между бедрами)
+        if not (np.isnan(mp[23]).any() or np.isnan(mp[24]).any()):
+            blender_points[0] = (mp[23] + mp[24]) / 2  # pelvis
+
+        # Позвоночник
+        if not (np.isnan(mp[23]).any() or np.isnan(mp[24]).any() or np.isnan(mp[11]).any() or np.isnan(mp[12]).any()):
+            pelvis = (mp[23] + mp[24]) / 2
+            chest = (mp[11] + mp[12]) / 2
+            spine_vector = chest - pelvis
+
+            # Основной позвоночник
+            blender_points[1] = pelvis + spine_vector * 0.2  # spine
+            blender_points[2] = pelvis + spine_vector * 0.4  # spine.001
+            blender_points[3] = pelvis + spine_vector * 0.6  # spine.002
+            blender_points[4] = pelvis + spine_vector * 0.8  # spine.003
+            blender_points[5] = chest  # spine.004
+
+        # Шея и голова
+        if not (np.isnan(mp[0]).any() or np.isnan(mp[11]).any() or np.isnan(mp[12]).any()):
+            chest = (mp[11] + mp[12]) / 2
+            head_vector = mp[0] - chest
+
+            blender_points[6] = chest + head_vector * 0.3  # spine.005 (шея)
+            blender_points[7] = mp[0]  # spine.006 (голова)
+
+        # Плечи
+        blender_points[8] = mp[11]  # shoulder.L
+        blender_points[12] = mp[12]  # shoulder.R
+
+        # Руки
+        blender_points[9] = mp[13]  # upper_arm.L
+        blender_points[10] = mp[15]  # forearm.L
+        blender_points[11] = mp[15]  # hand.L (используем запястье MediaPipe)
+
+        blender_points[13] = mp[14]  # upper_arm.R
+        blender_points[14] = mp[16]  # forearm.R
+        blender_points[15] = mp[16]  # hand.R (используем запястье MediaPipe)
+
+        # Ноги
+        blender_points[16] = mp[23]  # thigh.L
+        blender_points[17] = mp[25]  # shin.L
+        blender_points[18] = mp[27]  # foot.L
+
+        # Обработка пятки и пальцев для левой ноги
+        if not np.isnan(mp[27]).any() and not np.isnan(mp[31]).any():
+            ankle_l = mp[27]
+            toe_l = mp[31]
+            foot_vector = toe_l - ankle_l
+
+            # Пятка находится в противоположном направлении от пальцев
+            heel_vector = -foot_vector * 0.4
+            blender_points[19] = ankle_l + heel_vector  # heel.L
+            blender_points[20] = toe_l  # toe.L
+
+        # Правая нога
+        blender_points[21] = mp[24]  # thigh.R
+        blender_points[22] = mp[26]  # shin.R
+        blender_points[23] = mp[28]  # foot.R
+
+        # Обработка пятки и пальцев для правой ноги
+        if not np.isnan(mp[28]).any() and not np.isnan(mp[32]).any():
+            ankle_r = mp[28]
+            toe_r = mp[32]
+            foot_vector = toe_r - ankle_r
+
+            # Пятка находится в противоположном направлении от пальцев
+            heel_vector = -foot_vector * 0.4
+            blender_points[24] = ankle_r + heel_vector  # heel.R
+            blender_points[25] = toe_r  # toe.R
+
+        return blender_points
+
     def track_frame(self, frame: np.ndarray) -> np.ndarray:
         """
         Отслеживает точки на одном кадре.
@@ -223,8 +297,8 @@ class MediaPipeTracker(BaseTracker):
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_height, frame_width = frame.shape[:2]
 
-        # Массив для хранения результатов
-        landmarks = np.full((self.num_tracked_points, 3), np.nan)
+        # Массив для хранения результатов MediaPipe
+        mp_landmarks = np.full((33, 3), np.nan)
 
         # Обработка кадра моделью Pose
         results = self.pose.process(frame_rgb)
@@ -233,13 +307,14 @@ class MediaPipeTracker(BaseTracker):
         if results.pose_landmarks:
             for i, landmark in enumerate(results.pose_landmarks.landmark):
                 # Координаты нормализованы от 0 до 1, умножаем на размеры кадра
-                landmarks[i, 0] = landmark.x * frame_width
-                landmarks[i, 1] = landmark.y * frame_height
-                landmarks[i, 2] = landmark.visibility
+                mp_landmarks[i, 0] = landmark.x * frame_width
+                mp_landmarks[i, 1] = landmark.y * frame_height
+                mp_landmarks[i, 2] = landmark.visibility
 
-        # TODO: Добавить обработку рук и лица если они включены
+        # Преобразуем координаты MediaPipe в Blender-скелет
+        blender_landmarks = self.map_mediapipe_to_blender_skeleton(mp_landmarks)
 
-        return landmarks
+        return blender_landmarks
 
     def track_video(
             self,
@@ -377,7 +452,7 @@ class MediaPipeTracker(BaseTracker):
         vis_frame = frame.copy()
 
         # Рисуем соединения
-        for connection in self.POSE_CONNECTIONS:
+        for connection in self.SKELETON_CONNECTIONS:
             start_idx, end_idx = connection
 
             # Проверяем, что обе точки найдены
@@ -423,9 +498,9 @@ class MediaPipeTracker(BaseTracker):
         return {
             "name": self.name,
             "type": "mediapipe",
-            "landmark_names": self.landmark_names,
+            "landmark_names": self.SKELETON_LANDMARK_NAMES,
             "num_tracked_points": self.num_tracked_points,
-            "connections": self.POSE_CONNECTIONS,
+            "connections": self.SKELETON_CONNECTIONS,
             "model_complexity": self.model_complexity,
             "enable_segmentation": self.enable_segmentation,
             "min_detection_confidence": self.min_detection_confidence,

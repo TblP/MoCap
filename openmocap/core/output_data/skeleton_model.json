@@ -1,41 +1,34 @@
 {
   "metadata": {
-    "num_landmarks": 33,
-    "num_connections": 35,
+    "num_landmarks": 26,
+    "num_connections": 25,
     "joint_mapping": {
-      "nose": 0,
-      "left_eye_inner": 1,
-      "left_eye": 2,
-      "left_eye_outer": 3,
-      "right_eye_inner": 4,
-      "right_eye": 5,
-      "right_eye_outer": 6,
-      "left_ear": 7,
-      "right_ear": 8,
-      "mouth_left": 9,
-      "mouth_right": 10,
-      "left_shoulder": 11,
-      "right_shoulder": 12,
-      "left_elbow": 13,
-      "right_elbow": 14,
-      "left_wrist": 15,
-      "right_wrist": 16,
-      "left_pinky": 17,
-      "right_pinky": 18,
-      "left_index": 19,
-      "right_index": 20,
-      "left_thumb": 21,
-      "right_thumb": 22,
-      "left_hip": 23,
-      "right_hip": 24,
-      "left_knee": 25,
-      "right_knee": 26,
-      "left_ankle": 27,
-      "right_ankle": 28,
-      "left_heel": 29,
-      "right_heel": 30,
-      "left_foot_index": 31,
-      "right_foot_index": 32
+      "pelvis": 0,
+      "spine": 1,
+      "spine.001": 2,
+      "spine.002": 3,
+      "spine.003": 4,
+      "spine.004": 5,
+      "spine.005": 6,
+      "spine.006": 7,
+      "shoulder.L": 8,
+      "upper_arm.L": 9,
+      "forearm.L": 10,
+      "hand.L": 11,
+      "shoulder.R": 12,
+      "upper_arm.R": 13,
+      "forearm.R": 14,
+      "hand.R": 15,
+      "thigh.L": 16,
+      "shin.L": 17,
+      "foot.L": 18,
+      "heel.L": 19,
+      "toe.L": 20,
+      "thigh.R": 21,
+      "shin.R": 22,
+      "foot.R": 23,
+      "heel.R": 24,
+      "toe.R": 25
     },
     "tracker": "mediapipe_tracker",
     "num_cameras": 2
@@ -43,382 +36,284 @@
   "landmarks": [
     {
       "index": 0,
-      "name": "nose"
+      "name": "pelvis"
     },
     {
       "index": 1,
-      "name": "left_eye_inner"
+      "name": "spine"
     },
     {
       "index": 2,
-      "name": "left_eye"
+      "name": "spine.001"
     },
     {
       "index": 3,
-      "name": "left_eye_outer"
+      "name": "spine.002"
     },
     {
       "index": 4,
-      "name": "right_eye_inner"
+      "name": "spine.003"
     },
     {
       "index": 5,
-      "name": "right_eye"
+      "name": "spine.004"
     },
     {
       "index": 6,
-      "name": "right_eye_outer"
+      "name": "spine.005"
     },
     {
       "index": 7,
-      "name": "left_ear"
+      "name": "spine.006"
     },
     {
       "index": 8,
-      "name": "right_ear"
+      "name": "shoulder.L"
     },
     {
       "index": 9,
-      "name": "mouth_left"
+      "name": "upper_arm.L"
     },
     {
       "index": 10,
-      "name": "mouth_right"
+      "name": "forearm.L"
     },
     {
       "index": 11,
-      "name": "left_shoulder"
+      "name": "hand.L"
     },
     {
       "index": 12,
-      "name": "right_shoulder"
+      "name": "shoulder.R"
     },
     {
       "index": 13,
-      "name": "left_elbow"
+      "name": "upper_arm.R"
     },
     {
       "index": 14,
-      "name": "right_elbow"
+      "name": "forearm.R"
     },
     {
       "index": 15,
-      "name": "left_wrist"
+      "name": "hand.R"
     },
     {
       "index": 16,
-      "name": "right_wrist"
+      "name": "thigh.L"
     },
     {
       "index": 17,
-      "name": "left_pinky"
+      "name": "shin.L"
     },
     {
       "index": 18,
-      "name": "right_pinky"
+      "name": "foot.L"
     },
     {
       "index": 19,
-      "name": "left_index"
+      "name": "heel.L"
     },
     {
       "index": 20,
-      "name": "right_index"
+      "name": "toe.L"
     },
     {
       "index": 21,
-      "name": "left_thumb"
+      "name": "thigh.R"
     },
     {
       "index": 22,
-      "name": "right_thumb"
+      "name": "shin.R"
     },
     {
       "index": 23,
-      "name": "left_hip"
+      "name": "foot.R"
     },
     {
       "index": 24,
-      "name": "right_hip"
+      "name": "heel.R"
     },
     {
       "index": 25,
-      "name": "left_knee"
-    },
-    {
-      "index": 26,
-      "name": "right_knee"
-    },
-    {
-      "index": 27,
-      "name": "left_ankle"
-    },
-    {
-      "index": 28,
-      "name": "right_ankle"
-    },
-    {
-      "index": 29,
-      "name": "left_heel"
-    },
-    {
-      "index": 30,
-      "name": "right_heel"
-    },
-    {
-      "index": 31,
-      "name": "left_foot_index"
-    },
-    {
-      "index": 32,
-      "name": "right_foot_index"
+      "name": "toe.R"
     }
   ],
   "connections": [
     {
-      "start": 23,
-      "end": 11,
-      "start_name": "left_hip",
-      "end_name": "left_shoulder",
-      "name": "left_hip_to_left_shoulder"
-    },
-    {
-      "start": 23,
-      "end": 12,
-      "start_name": "left_hip",
-      "end_name": "right_shoulder",
-      "name": "left_hip_to_right_shoulder"
-    },
-    {
-      "start": 24,
-      "end": 11,
-      "start_name": "right_hip",
-      "end_name": "left_shoulder",
-      "name": "right_hip_to_left_shoulder"
-    },
-    {
-      "start": 24,
-      "end": 12,
-      "start_name": "right_hip",
-      "end_name": "right_shoulder",
-      "name": "right_hip_to_right_shoulder"
-    },
-    {
-      "start": 23,
-      "end": 24,
-      "start_name": "left_hip",
-      "end_name": "right_hip",
-      "name": "left_hip_to_right_hip"
-    },
-    {
-      "start": 11,
-      "end": 12,
-      "start_name": "left_shoulder",
-      "end_name": "right_shoulder",
-      "name": "left_shoulder_to_right_shoulder"
-    },
-    {
-      "start": 11,
-      "end": 13,
-      "start_name": "left_shoulder",
-      "end_name": "left_elbow",
-      "name": "left_shoulder_to_left_elbow"
-    },
-    {
-      "start": 13,
-      "end": 15,
-      "start_name": "left_elbow",
-      "end_name": "left_wrist",
-      "name": "left_elbow_to_left_wrist"
-    },
-    {
-      "start": 15,
-      "end": 17,
-      "start_name": "left_wrist",
-      "end_name": "left_pinky",
-      "name": "left_wrist_to_left_pinky"
-    },
-    {
-      "start": 15,
-      "end": 19,
-      "start_name": "left_wrist",
-      "end_name": "left_index",
-      "name": "left_wrist_to_left_index"
-    },
-    {
-      "start": 15,
-      "end": 21,
-      "start_name": "left_wrist",
-      "end_name": "left_thumb",
-      "name": "left_wrist_to_left_thumb"
-    },
-    {
-      "start": 12,
-      "end": 14,
-      "start_name": "right_shoulder",
-      "end_name": "right_elbow",
-      "name": "right_shoulder_to_right_elbow"
-    },
-    {
-      "start": 14,
-      "end": 16,
-      "start_name": "right_elbow",
-      "end_name": "right_wrist",
-      "name": "right_elbow_to_right_wrist"
-    },
-    {
-      "start": 16,
-      "end": 18,
-      "start_name": "right_wrist",
-      "end_name": "right_pinky",
-      "name": "right_wrist_to_right_pinky"
-    },
-    {
-      "start": 16,
-      "end": 20,
-      "start_name": "right_wrist",
-      "end_name": "right_index",
-      "name": "right_wrist_to_right_index"
-    },
-    {
-      "start": 16,
-      "end": 22,
-      "start_name": "right_wrist",
-      "end_name": "right_thumb",
-      "name": "right_wrist_to_right_thumb"
-    },
-    {
-      "start": 23,
-      "end": 25,
-      "start_name": "left_hip",
-      "end_name": "left_knee",
-      "name": "left_hip_to_left_knee"
-    },
-    {
-      "start": 25,
-      "end": 27,
-      "start_name": "left_knee",
-      "end_name": "left_ankle",
-      "name": "left_knee_to_left_ankle"
-    },
-    {
-      "start": 27,
-      "end": 31,
-      "start_name": "left_ankle",
-      "end_name": "left_foot_index",
-      "name": "left_ankle_to_left_foot_index"
-    },
-    {
-      "start": 27,
-      "end": 29,
-      "start_name": "left_ankle",
-      "end_name": "left_heel",
-      "name": "left_ankle_to_left_heel"
-    },
-    {
-      "start": 24,
-      "end": 26,
-      "start_name": "right_hip",
-      "end_name": "right_knee",
-      "name": "right_hip_to_right_knee"
-    },
-    {
-      "start": 26,
-      "end": 28,
-      "start_name": "right_knee",
-      "end_name": "right_ankle",
-      "name": "right_knee_to_right_ankle"
-    },
-    {
-      "start": 28,
-      "end": 32,
-      "start_name": "right_ankle",
-      "end_name": "right_foot_index",
-      "name": "right_ankle_to_right_foot_index"
-    },
-    {
-      "start": 28,
-      "end": 30,
-      "start_name": "right_ankle",
-      "end_name": "right_heel",
-      "name": "right_ankle_to_right_heel"
-    },
-    {
-      "start": 0,
-      "end": 11,
-      "start_name": "nose",
-      "end_name": "left_shoulder",
-      "name": "nose_to_left_shoulder"
-    },
-    {
-      "start": 0,
-      "end": 12,
-      "start_name": "nose",
-      "end_name": "right_shoulder",
-      "name": "nose_to_right_shoulder"
-    },
-    {
       "start": 0,
       "end": 1,
-      "start_name": "nose",
-      "end_name": "left_eye_inner",
-      "name": "nose_to_left_eye_inner"
+      "start_name": "pelvis",
+      "end_name": "spine",
+      "name": "pelvis_to_spine"
     },
     {
       "start": 1,
       "end": 2,
-      "start_name": "left_eye_inner",
-      "end_name": "left_eye",
-      "name": "left_eye_inner_to_left_eye"
+      "start_name": "spine",
+      "end_name": "spine.001",
+      "name": "spine_to_spine.001"
     },
     {
       "start": 2,
       "end": 3,
-      "start_name": "left_eye",
-      "end_name": "left_eye_outer",
-      "name": "left_eye_to_left_eye_outer"
+      "start_name": "spine.001",
+      "end_name": "spine.002",
+      "name": "spine.001_to_spine.002"
     },
     {
       "start": 3,
-      "end": 7,
-      "start_name": "left_eye_outer",
-      "end_name": "left_ear",
-      "name": "left_eye_outer_to_left_ear"
-    },
-    {
-      "start": 0,
       "end": 4,
-      "start_name": "nose",
-      "end_name": "right_eye_inner",
-      "name": "nose_to_right_eye_inner"
+      "start_name": "spine.002",
+      "end_name": "spine.003",
+      "name": "spine.002_to_spine.003"
     },
     {
       "start": 4,
       "end": 5,
-      "start_name": "right_eye_inner",
-      "end_name": "right_eye",
-      "name": "right_eye_inner_to_right_eye"
+      "start_name": "spine.003",
+      "end_name": "spine.004",
+      "name": "spine.003_to_spine.004"
     },
     {
       "start": 5,
       "end": 6,
-      "start_name": "right_eye",
-      "end_name": "right_eye_outer",
-      "name": "right_eye_to_right_eye_outer"
+      "start_name": "spine.004",
+      "end_name": "spine.005",
+      "name": "spine.004_to_spine.005"
     },
     {
       "start": 6,
+      "end": 7,
+      "start_name": "spine.005",
+      "end_name": "spine.006",
+      "name": "spine.005_to_spine.006"
+    },
+    {
+      "start": 4,
       "end": 8,
-      "start_name": "right_eye_outer",
-      "end_name": "right_ear",
-      "name": "right_eye_outer_to_right_ear"
+      "start_name": "spine.003",
+      "end_name": "shoulder.L",
+      "name": "spine.003_to_shoulder.L"
+    },
+    {
+      "start": 8,
+      "end": 9,
+      "start_name": "shoulder.L",
+      "end_name": "upper_arm.L",
+      "name": "shoulder.L_to_upper_arm.L"
     },
     {
       "start": 9,
       "end": 10,
-      "start_name": "mouth_left",
-      "end_name": "mouth_right",
-      "name": "mouth_left_to_mouth_right"
+      "start_name": "upper_arm.L",
+      "end_name": "forearm.L",
+      "name": "upper_arm.L_to_forearm.L"
+    },
+    {
+      "start": 10,
+      "end": 11,
+      "start_name": "forearm.L",
+      "end_name": "hand.L",
+      "name": "forearm.L_to_hand.L"
+    },
+    {
+      "start": 4,
+      "end": 12,
+      "start_name": "spine.003",
+      "end_name": "shoulder.R",
+      "name": "spine.003_to_shoulder.R"
+    },
+    {
+      "start": 12,
+      "end": 13,
+      "start_name": "shoulder.R",
+      "end_name": "upper_arm.R",
+      "name": "shoulder.R_to_upper_arm.R"
+    },
+    {
+      "start": 13,
+      "end": 14,
+      "start_name": "upper_arm.R",
+      "end_name": "forearm.R",
+      "name": "upper_arm.R_to_forearm.R"
+    },
+    {
+      "start": 14,
+      "end": 15,
+      "start_name": "forearm.R",
+      "end_name": "hand.R",
+      "name": "forearm.R_to_hand.R"
+    },
+    {
+      "start": 0,
+      "end": 16,
+      "start_name": "pelvis",
+      "end_name": "thigh.L",
+      "name": "pelvis_to_thigh.L"
+    },
+    {
+      "start": 16,
+      "end": 17,
+      "start_name": "thigh.L",
+      "end_name": "shin.L",
+      "name": "thigh.L_to_shin.L"
+    },
+    {
+      "start": 17,
+      "end": 18,
+      "start_name": "shin.L",
+      "end_name": "foot.L",
+      "name": "shin.L_to_foot.L"
+    },
+    {
+      "start": 18,
+      "end": 19,
+      "start_name": "foot.L",
+      "end_name": "heel.L",
+      "name": "foot.L_to_heel.L"
+    },
+    {
+      "start": 18,
+      "end": 20,
+      "start_name": "foot.L",
+      "end_name": "toe.L",
+      "name": "foot.L_to_toe.L"
+    },
+    {
+      "start": 0,
+      "end": 21,
+      "start_name": "pelvis",
+      "end_name": "thigh.R",
+      "name": "pelvis_to_thigh.R"
+    },
+    {
+      "start": 21,
+      "end": 22,
+      "start_name": "thigh.R",
+      "end_name": "shin.R",
+      "name": "thigh.R_to_shin.R"
+    },
+    {
+      "start": 22,
+      "end": 23,
+      "start_name": "shin.R",
+      "end_name": "foot.R",
+      "name": "shin.R_to_foot.R"
+    },
+    {
+      "start": 23,
+      "end": 24,
+      "start_name": "foot.R",
+      "end_name": "heel.R",
+      "name": "foot.R_to_heel.R"
+    },
+    {
+      "start": 23,
+      "end": 25,
+      "start_name": "foot.R",
+      "end_name": "toe.R",
+      "name": "foot.R_to_toe.R"
     }
   ]
 }

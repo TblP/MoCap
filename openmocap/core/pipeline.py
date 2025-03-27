@@ -631,8 +631,8 @@ if __name__ == "__main__":
     ]
 
     recording_videos = [
-        r"C:\Users\vczyp\openmocap_data\recordings\recording_20250322_235323\camera_0.mp4",
-        r"C:\Users\vczyp\openmocap_data\recordings\recording_20250322_235323\camera_1.mp4"
+        r"C:\Users\vczyp\openmocap_data\recordings\recording_20250324_220252\camera_0.mp4",
+        r"C:\Users\vczyp\openmocap_data\recordings\recording_20250324_220252\camera_1.mp4"
     ]
 
     # Проверяем наличие видеофайлов
@@ -640,7 +640,11 @@ if __name__ == "__main__":
             Path(video).exists() for video in recording_videos):
         # Выполняем полный конвейер обработки
         pipeline.set_calibrator(MultiCameraCalibrator()) \
-            .set_tracker(MediaPipeTracker()) \
+            .set_tracker(MediaPipeTracker(
+                model_complexity=1,
+                min_detection_confidence=0.2,
+                min_tracking_confidence=0.2
+            )) \
             .calibrate_cameras(calibration_videos) \
             .track_videos(recording_videos) \
             .triangulate() \
