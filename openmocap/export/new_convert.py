@@ -130,20 +130,21 @@ class JointRotationCalculator:
 
         return limits
 
-    def calculate_joint_rotations(self, joints_positions: Dict[str, List[float]]) -> Dict[str, Dict[str, Any]]:
+    def calculate_joint_rotations(self, frame_data: Dict[str, Dict[str, float]]) -> Dict[str, Dict[str, Any]]:
         """
-        Вычисляет вращения для суставов на основе их позиций
+        Вычисляет вращения для суставов на основе их позиций в кадре
 
         Args:
-            joints_positions: Словарь с позициями суставов {имя_сустава: [x, y, z]}
+            frame_data: Словарь с позициями суставов {имя_сустава: {"x": x, "y": y, "z": z}}
 
         Returns:
             Dict: Словарь с вращениями для каждого сустава
         """
-        # Создаем numpy массивы из позиций суставов
+        # Преобразуем данные кадра в формат {имя_сустава: [x, y, z]}
         positions = {}
-        for joint, pos in joints_positions.items():
-            positions[joint] = np.array(pos)
+        for joint, coords in frame_data.items():
+            if isinstance(coords, dict) and "x" in coords and "y" in coords and "z" in coords:
+                positions[joint] = np.array([coords["x"], coords["y"], coords["z"]])
 
         # Словарь для хранения результатов
         rotations = {}
@@ -366,36 +367,57 @@ def main():
     # Путь к модели скелета (замените на актуальный путь)
     skeleton_model_path = r"C:\Users\vczyp\PycharmProjects\MoCap\openmocap\core\output_data\skeleton_model.json"
 
+    # Путь к файлу с позициями суставов
+    joints_positions_path = r"C:\Users\vczyp\PycharmProjects\MoCap\openmocap\core\output_data\clean_points_3d.json"
+
+    # Путь для сохранения результата
+    output_path = "joint_rotations.json"
+
     # Создаем калькулятор
     calculator = JointRotationCalculator(skeleton_model_path)
 
     # Загружаем позиции суставов из JSON
-    with open(r"C:\Users\vczyp\PycharmProjects\MoCap\openmocap\core\output_data\clean_points_3d.json", "r") as f:
+    with open(joints_positions_path, "r") as f:
         data = json.load(f)
 
-    # Извлекаем позиции суставов
-    joints_positions = data["metadata"]["initial_positions"]
+    # Проверяем наличие необходимых ключей
+    if "metadata" not in data or "frames" not in data:
+        raise ValueError("Неверная структура JSON-файла: отсутствуют ключи 'metadata' или 'frames'")
 
-    # Вычисляем вращения
-    rotations = calculator.calculate_joint_rotations(joints_positions)
+    metadata = data["metadata"]
+    frames = data["frames"]
 
-    # Выводим результат
+    logger.info(f"Загружено {len(frames)} кадров из файла {joints_positions_path}")
+
+    # Создаем структуру для выходного JSON
     output = {
-        "metadata": data["metadata"],
-        "frames": [
-            {
-                "time": 0.0,
-                "frame_index": 0,
-                "joints": rotations
-            }
-        ]
+        "metadata": metadata,
+        "frames": []
     }
 
+    # Обрабатываем каждый кадр
+    for frame_idx, frame in enumerate(frames):
+        # Вычисляем вращения для текущего кадра
+        rotations = calculator.calculate_joint_rotations(frame)
+
+        # Добавляем результат в выходной JSON
+        output_frame = {
+            "time": frame_idx / metadata.get("fps", 30.0),  # Время в секундах
+            "frame_index": frame_idx,
+            "joints": rotations
+        }
+
+        output["frames"].append(output_frame)
+
+        # Выводим прогресс
+        if frame_idx % 100 == 0:
+            logger.info(f"Обработано {frame_idx}/{len(frames)} кадров")
+
     # Сохраняем результат в файл
-    with open("joint_rotations_test.json", "w") as f:
+    with open(output_path, "w") as f:
         json.dump(output, f, indent=4)
 
-    print("Вращения суставов успешно вычислены и сохранены")
+    logger.info(f"Вращения суставов успешно вычислены и сохранены в {output_path}")
 
 
 if __name__ == "__main__":
